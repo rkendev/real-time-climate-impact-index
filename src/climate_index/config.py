@@ -76,6 +76,28 @@ class Settings(BaseSettings):
     # FR-5 event-time tumbling window size in minutes.
     window_minutes: int = 30
 
+    # NFR-DQ2 sparsity threshold: a window with fewer than this many validated
+    # events is graded AMBIGUOUS regardless of stream composition. A config
+    # constant, not a literal buried in the compute core.
+    sparsity_min_events: int = 2
+
+    # E-7 formula shape constants. The spec leaves the exact bounded form of the
+    # dryness, pollution, and temperature-anomaly normalization to the
+    # implementation; these are the tunable saturation points of the chosen form
+    # and live here so the compute core carries no magic numbers. Documented in
+    # core/features.py and flagged for a possible spec update.
+    #
+    # Rainfall (mm) at or above which the rain sub-score of dryness saturates to
+    # zero (fully wet). Below it, dryness rises linearly toward one at zero rain.
+    dryness_rainfall_saturation_mm: float = 20.0
+    # Aerosol index at or above which the aerosol sub-score of pollution
+    # saturates to one. Below it the sub-score scales linearly from zero.
+    pollution_aerosol_saturation: float = 2.0
+    # Temperature anomaly (degrees C above baseline) at or above which the heat
+    # contribution to the impact index saturates to one. Cooler-than-baseline
+    # windows contribute zero.
+    temperature_anomaly_scale_c: float = 10.0
+
     # NFR-O1 log verbosity for the structured logger.
     log_level: str = "INFO"
 
