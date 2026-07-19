@@ -47,7 +47,14 @@ test:
 run_producer:
 	$(BIN)/python -m climate_index.producer
 
+# Run the processor on the in-memory path (UC-3, UC-4). Populates a MemoryTransport
+# via the producer, windows the validated events, and writes aggregates and raw
+# events through the DuckDB stores. Needs no broker (local-first). The live Kafka
+# consumer loop arrives in the infra track.
+run_processor:
+	$(BIN)/python -m climate_index.processor
+
 # Stubs: the targets must exist (FR-10); implementations arrive in later tracks.
-infra_up run_processor smoke ui:
+infra_up smoke ui:
 	@echo "$@: not implemented until a later track"
 
