@@ -28,3 +28,24 @@ class Transport(Protocol):
     def consume(self) -> Iterator[tuple[str, Mapping[str, Any]]]:
         """Yield ``(key, value)`` pairs in publication order."""
         ...
+
+
+@runtime_checkable
+class CommittableConsumer(Protocol):
+    """A consumer whose offsets are committed explicitly, after the write (ADR-0002).
+
+    Auto-commit is disabled: the recovery loop commits only once a closed
+    window's aggregate write has succeeded, so a crash before commit reprocesses
+    the uncommitted events and, because bucketing is event-time deterministic and
+    the aggregate write is idempotent, reforms the same window with no duplicate
+    and no undercount (NFR-R1, NFR-R2). ``poll`` yields uncommitted messages
+    tagged with their monotonic offset; ``commit`` advances the committed offset.
+    """
+
+    def poll(self) -> Iterator[tuple[int, str, Mapping[str, Any]]]:
+        """Yield ``(offset, key, value)`` for messages after the committed offset."""
+        ...
+
+    def commit(self, offset: int) -> None:
+        """Commit through ``offset`` (inclusive), so it is not re-yielded."""
+        ...

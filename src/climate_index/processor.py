@@ -7,14 +7,15 @@ store Protocols, never a concrete client, so tests inject MemoryTransport and th
 DuckDB stores.
 
 The flow is a clean batch seam: consume-and-validate, then window, then write.
-The live Kafka consumer loop with the commit-after-write offset rule (ADR-0002)
-is Track H; it wraps this same shape, committing offsets only once a closed
-window's aggregate write has succeeded. That offset and recovery logic is
-deliberately not implemented here, and nothing here depends on Kafka: the
-``__main__`` path runs entirely in memory (the local-first rule).
+The Kafka consumer loop with the commit-after-write offset rule (ADR-0002) lives
+in :mod:`climate_index.consumer`; it wraps this same shape, committing offsets
+only once a closed window's aggregate write has succeeded. Nothing here depends
+on Kafka: the ``__main__`` path runs entirely in memory (the local-first rule).
 """
 
 from __future__ import annotations
+
+from dataclasses import dataclass
 
 from climate_index.adapters.duckdb import DuckDBAggregateStore, DuckDBRawStore
 from climate_index.adapters.memory import MemoryTransport
@@ -27,21 +28,36 @@ from climate_index.logging_utils import StructuredLogger, get_logger
 from climate_index.producer import run_producer
 
 
-def run_processor(
+@dataclass(frozen=True)
+class ProcessorRun:
+    """The metadata-only outcome of one processor pass (counts, never payloads)."""
+
+    consumed: int
+    forwarded: int
+    quarantined: int
+    records: int
+
+
+def process(
     transport: Transport,
     aggregate_store: AggregateStore,
     raw_store: RawStore,
     settings: Settings | None = None,
     *,
     logger: StructuredLogger | None = None,
-) -> int:
-    """Consume, validate, window, and persist. Returns the number of records.
+) -> ProcessorRun:
+    """Consume, validate, window, and persist; return the full run counts.
 
     Every consumed message passes the deterministic validation gate first
     (INV-3): a quarantined message is counted and never contributes to an
     aggregate or a raw row. Validated events are appended to the raw store
     (FR-7), then windowed into one ClimateIndexRecord per region per window and
     written to the aggregate store idempotently on the natural key (FR-6).
+
+    Returns a :class:`ProcessorRun` so callers (the smoke check) can assert the
+    FR-7 relationship raw_count == consumed - quarantined without re-deriving the
+    gate counts. :func:`run_processor` wraps this and returns just the record
+    count for the existing batch-seam callers.
     """
     settings = settings if settings is not None else get_settings()
     log = logger if logger is not None else get_logger("processor")
@@ -68,14 +84,32 @@ def run_processor(
     for record in records:
         aggregate_store.upsert(record.model_dump(mode="python"))
 
-    log.event(
-        "processor_run_complete",
+    run = ProcessorRun(
         consumed=consumed,
         forwarded=gate.forwarded_count,
         quarantined=gate.quarantined_count,
         records=len(records),
     )
-    return len(records)
+    log.event(
+        "processor_run_complete",
+        consumed=run.consumed,
+        forwarded=run.forwarded,
+        quarantined=run.quarantined,
+        records=run.records,
+    )
+    return run
+
+
+def run_processor(
+    transport: Transport,
+    aggregate_store: AggregateStore,
+    raw_store: RawStore,
+    settings: Settings | None = None,
+    *,
+    logger: StructuredLogger | None = None,
+) -> int:
+    """Run the processor and return the number of aggregate records written."""
+    return process(transport, aggregate_store, raw_store, settings, logger=logger).records
 
 
 def main() -> None:

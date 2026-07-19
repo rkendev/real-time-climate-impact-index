@@ -15,8 +15,8 @@ from pathlib import Path
 
 import pytest
 
-from climate_index.adapters.kafka import KafkaTransport
-from climate_index.interfaces import Transport
+from climate_index.adapters.kafka import KafkaCommittableConsumer, KafkaTransport
+from climate_index.interfaces import CommittableConsumer, Transport
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
@@ -39,11 +39,17 @@ def test_kafka_transport_satisfies_protocol() -> None:
     assert isinstance(KafkaTransport("broker-placeholder"), Transport)
 
 
+def test_kafka_committable_consumer_satisfies_protocol() -> None:
+    assert isinstance(KafkaCommittableConsumer("broker-placeholder"), CommittableConsumer)
+
+
 def test_importing_producer_and_adapter_pulls_in_no_kafka_client() -> None:
     code = (
         "import sys\n"
         "import climate_index.producer\n"
+        "import climate_index.consumer\n"
         "import climate_index.adapters.kafka.transport\n"
+        "climate_index.adapters.kafka.transport.KafkaCommittableConsumer('broker-placeholder')\n"
         "roots = ('kafka', 'confluent_kafka', 'aiokafka')\n"
         "bad = [m for m in sys.modules if m.split('.')[0] in roots]\n"
         "assert not bad, bad\n"
@@ -64,3 +70,14 @@ def test_live_kafka_publish_consume_roundtrip() -> None:  # pragma: no cover
     transport = KafkaTransport("broker-placeholder")
     transport.publish("EUR", {"n": 1})
     assert next(transport.consume()) == ("EUR", {"n": 1})
+
+
+@pytest.mark.skip(reason="requires a running broker; deferred to the infra track")
+def test_live_kafka_commit_after_write_recovery() -> None:  # pragma: no cover
+    # The live proof of ADR-0002 against a real broker: consume a window, write
+    # its aggregate, commit, then restart and assert no reprocessing. The
+    # brokerless equivalent runs in test_consumer_recovery.py.
+    consumer = KafkaCommittableConsumer("broker-placeholder")
+    offset, key, _value = next(consumer.poll())
+    assert key == "EUR"
+    consumer.commit(offset)

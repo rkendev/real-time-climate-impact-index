@@ -6,6 +6,6 @@ here in Phase 1, Kafka and the S3/DynamoDB store in Phase 2) implement them.
 """
 
 from climate_index.interfaces.store import AggregateStore, RawStore
-from climate_index.interfaces.transport import Transport
+from climate_index.interfaces.transport import CommittableConsumer, Transport
 
-__all__ = ["AggregateStore", "RawStore", "Transport"]
+__all__ = ["AggregateStore", "CommittableConsumer", "RawStore", "Transport"]
