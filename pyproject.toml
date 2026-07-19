@@ -16,6 +16,14 @@ strict = true
 plugins = ["pydantic.mypy"]
 files = ["src"]
 
+# The Kafka client is intentionally not installed this track (it is imported
+# lazily in the adapter run path and pinned in the infra track). Declare it as a
+# stubless third-party module so strict mypy neither errors on the missing import
+# nor flags a stale inline ignore. See the deferred-client note in the adapter.
+[[tool.mypy.overrides]]
+module = ["confluent_kafka.*"]
+ignore_missing_imports = true
+
 [tool.pydantic-mypy]
 init_forbid_extra = true
 init_typed = true

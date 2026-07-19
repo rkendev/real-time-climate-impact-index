@@ -32,7 +32,7 @@ class KafkaTransport:
     @staticmethod
     def _client() -> Any:
         """Import the Kafka client lazily (the single import site in this module)."""
-        import confluent_kafka  # type: ignore[import-not-found]
+        import confluent_kafka
 
         return confluent_kafka
 
