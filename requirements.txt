@@ -1,5 +1,6 @@
 # Single source of truth for RUNTIME dependencies (NFR-M1, INV-5).
 # Installed by both the host environment and any container. Dev and tooling
 # pins live in requirements-dev.txt; do not add tools here.
+duckdb==1.5.4
 pydantic==2.10.6
 pydantic-settings==2.7.1
