@@ -1,0 +1,16 @@
+# Virtual environment
+.venv/
+
+# Local environment and secrets (never committed; INV-1)
+.env
+
+# Local data and the smoke marker (produced by later tracks)
+data/
+.smoke_ok
+
+# Python caches and tool state
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
