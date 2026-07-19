@@ -54,7 +54,20 @@ run_producer:
 run_processor:
 	$(BIN)/python -m climate_index.processor
 
-# Stubs: the targets must exist (FR-10); implementations arrive in later tracks.
-infra_up smoke ui:
-	@echo "$@: not implemented until a later track"
+# End-to-end local smoke on the in-memory path (UC-6, FR-7, FR-10, no Kafka).
+# Produces a small batch, runs the pipeline, and asserts the aggregate store is
+# non-empty and duplicate-free and that raw counts equal produced minus
+# quarantined counts. On green it writes the local smoke marker the pre-deploy
+# gate checks; on a broken pipeline it exits non-zero.
+smoke:
+	$(BIN)/python -m climate_index.smoke
+
+# Open the read-only dashboard (UC-5, FR-8, FR-10). Reads the aggregate store
+# seeded by run_processor; performs no computation and no writes (INV-2).
+ui:
+	$(BIN)/streamlit run app/dashboard.py
+
+# Stub: the target must exist (FR-10); the cloud implementation is Phase 2.
+infra_up:
+	@echo "$@: not implemented until Phase 2 (AWS per ADR-0003, ADR-0005)"
 

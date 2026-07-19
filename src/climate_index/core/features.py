@@ -1,11 +1,13 @@
-"""Derived feature, index, and verbal-label computation (UC-3, FR-4, FR-5, FR-9).
+"""Derived feature and index computation (UC-3, FR-4, FR-5).
 
 Per region per event-time window, these pure functions turn the window's
-validated events into the three component metrics of E-7, combine them into the
-0..100 impact index, and map that index to a verbal label. They import no
-transport or store client and hold no structural constants of their own: the
-baselines, weights, thresholds, and formula saturation points are the sole
-authority of :mod:`climate_index.config` (INV-4, AT-10).
+validated events into the three component metrics of E-7 and combine them into
+the 0..100 impact index. They import no transport or store client and hold no
+structural constants of their own: the baselines, weights, and formula
+saturation points are the sole authority of :mod:`climate_index.config` (INV-4,
+AT-10). The verbal-label mapping (FR-9) is display formatting, not index
+computation, and lives apart in :mod:`climate_index.labels` so the read-only
+dashboard can use it without importing this compute path (INV-2, AT-6).
 
 Chosen bounded forms (E-7 leaves the exact form to the implementation):
 
@@ -118,14 +120,3 @@ def impact_index(
         raise ValueError("index_weights must sum to a positive value")
 
     return _clamp(100.0 * weighted_sum / total_weight, 0.0, 100.0)
-
-
-def verbal_label(index: float, settings: Settings | None = None) -> str:
-    """Map an impact index to ``"low"``, ``"medium"``, or ``"high"`` (FR-9)."""
-    settings = settings if settings is not None else get_settings()
-    thresholds = settings.label_thresholds
-    if index <= thresholds["low_max"]:
-        return "low"
-    if index <= thresholds["medium_max"]:
-        return "medium"
-    return "high"

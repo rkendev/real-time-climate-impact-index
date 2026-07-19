@@ -8,6 +8,7 @@ AT-10); DuckDB is not a cloud SDK, and the core stays free of it regardless.
 
 from __future__ import annotations
 
+from climate_index.adapters.duckdb.reader import DuckDBReadOnlyAggregateStore
 from climate_index.adapters.duckdb.store import DuckDBAggregateStore, DuckDBRawStore
 
-__all__ = ["DuckDBAggregateStore", "DuckDBRawStore"]
+__all__ = ["DuckDBAggregateStore", "DuckDBRawStore", "DuckDBReadOnlyAggregateStore"]

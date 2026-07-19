@@ -1,8 +1,9 @@
-"""AT-3 (UC-3, FR-4, FR-5) and FR-9: component metrics, index, and label.
+"""AT-3 (UC-3, FR-4, FR-5): component metrics and index.
 
 Fixed inputs produce the documented component metrics and an impact index within
-0..100 matching hand-computed values, single-type windows still compute from the
-available components (NFR-R4), and the verbal label maps by the configured bands.
+0..100 matching hand-computed values, and single-type windows still compute from
+the available components (NFR-R4). The verbal-label mapping (FR-9) is display
+formatting and is tested in ``test_labels.py``.
 """
 
 from __future__ import annotations
@@ -16,7 +17,6 @@ from climate_index.core.features import (
     impact_index,
     pollution_index,
     temperature_anomaly,
-    verbal_label,
 )
 from climate_index.core.models import SatelliteEvent, WeatherEvent
 
@@ -94,13 +94,3 @@ def test_pollution_without_satellite_imputes_zero() -> None:
 
 def test_temperature_anomaly_without_weather_imputes_zero() -> None:
     assert temperature_anomaly([], "EUR") == pytest.approx(0.0)
-
-
-def test_verbal_label_bands() -> None:
-    # Config bands: low_max 33.34, medium_max 66.67.
-    assert verbal_label(10.0) == "low"
-    assert verbal_label(33.34) == "low"
-    assert verbal_label(50.0) == "medium"
-    assert verbal_label(66.67) == "medium"
-    assert verbal_label(75.25) == "high"
-    assert verbal_label(100.0) == "high"
