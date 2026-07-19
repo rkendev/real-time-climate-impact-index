@@ -41,7 +41,13 @@ type-check:
 test:
 	$(BIN)/pytest
 
+# Run the producer against the Kafka adapter path (UC-1). No-op-safe without a
+# broker: with CII_TRANSPORT_BOOTSTRAP_SERVERS unset it logs and exits without
+# importing the Kafka client. The in-memory path is exercised by the tests.
+run_producer:
+	$(BIN)/python -m climate_index.producer
+
 # Stubs: the targets must exist (FR-10); implementations arrive in later tracks.
-infra_up run_producer run_processor smoke ui:
+infra_up run_processor smoke ui:
 	@echo "$@: not implemented until a later track"
 
