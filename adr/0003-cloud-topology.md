@@ -40,6 +40,7 @@ This is a cost-minimizing lift-and-shift of the local container stack, not a man
 - The store adapter is two-part: an S3 Iceberg aggregate-of-record for durability and idempotency, and a DynamoDB serving store for the dashboard. The processor writes both; the dashboard reads only DynamoDB.
 - The compute host runs the Kafka, consumer, and dashboard containers; it is ephemeral and recreated per demo from infrastructure-as-code.
 - The least-privilege matrix in `50_cloud_strategy.md` is implemented as IAM roles scoped to these services.
+- The one app image reaches the box through a private ECR repository in the persistent layer, built for arm64 on the host and pulled by the instance role, so no build and no secret run on the box. The mechanism is recorded in `adr/0006-image-delivery.md`.
 
 ## Falsifiable triggers
 
