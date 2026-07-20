@@ -1,0 +1,32 @@
+#!/usr/bin/env bash
+# Instance bootstrap for the climate index compute box (ADR-0003 EC2 shape).
+#
+# Installs docker and prepares the CII_ environment the container stack consumes.
+# The concrete docker-compose project, the Dockerfiles, and the image-delivery
+# mechanism are the P2-T3 seam: this script prepares the host and the environment
+# file; P2-T3 adds the compose project and starts it. Nothing here starts a
+# container in P2-T2.
+set -euo pipefail
+
+dnf install -y docker || yum install -y docker
+systemctl enable --now docker
+
+# Docker Compose plugin directory (ARM). P2-T3 pins the exact plugin version and
+# its delivery method.
+mkdir -p /usr/local/lib/docker/cli-plugins
+
+# CII_ environment wired from the persistent stack outputs, same names as the
+# local config so the containers need no code change (INV-1: no literal here, all
+# values are Terraform inputs).
+cat > /etc/climate-index.env <<'ENV'
+CII_AGGREGATE_BACKEND=aws
+CII_AWS_REGION=${aws_region}
+CII_ICEBERG_WAREHOUSE_BUCKET=${iceberg_warehouse_bucket}
+CII_RAW_S3_BUCKET=${raw_s3_bucket}
+CII_DYNAMO_TABLE=${dynamo_table}
+CII_ICEBERG_NAMESPACE=${iceberg_namespace}
+ENV
+
+# SEAM (P2-T3): author docker-compose.yml and the Dockerfiles, deliver the
+# images, then start the stack, for example:
+#   docker compose --env-file /etc/climate-index.env up -d

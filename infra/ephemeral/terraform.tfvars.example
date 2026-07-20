@@ -1,0 +1,19 @@
+# Copy to terraform.tfvars (git-ignored) and fill in real values. Placeholders
+# only. project_tag is injected from config.project_tag via TF_VAR_project_tag by
+# the Make targets. The bucket, table, namespace, and processor_role_name values
+# are taken from the persistent stack outputs at apply time (P2-T3).
+
+aws_region               = "us-east-1"
+owner_ip                 = "203.0.113.4/32"
+ami_id                   = "ami-00000000000000000"
+processor_role_name      = "climate-index-processor"
+iceberg_warehouse_bucket = "your-climate-index-iceberg-warehouse"
+raw_s3_bucket            = "your-climate-index-raw-store"
+dynamo_table             = "climate-index-serving"
+
+# Optional overrides (defaults shown):
+# instance_type     = "t4g.medium"
+# dashboard_port    = 8501
+# vpc_cidr          = "10.0.0.0/16"
+# subnet_cidr       = "10.0.1.0/24"
+# iceberg_namespace = "climate_index"
