@@ -40,6 +40,8 @@ def test_importing_aws_adapters_pulls_in_no_cloud_sdk() -> None:
         "import climate_index.adapters.aws._dynamo\n"
         "import climate_index.adapters.composite\n"
         "import climate_index.store_factory\n"
+        "import climate_index.consumer\n"
+        "import climate_index.processor\n"
         "roots = ('boto3', 'botocore', 'pyiceberg', 'pyarrow')\n"
         "bad = [m for m in sys.modules if m.split('.')[0] in roots]\n"
         "assert not bad, bad\n"

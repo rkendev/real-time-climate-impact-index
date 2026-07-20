@@ -105,6 +105,11 @@ class Settings(BaseSettings):
     # the environment when a concrete transport/store adapter runs (Phase 2).
     transport_bootstrap_servers: str | None = None
 
+    # When true, the consumer entry point drains the broker once and exits instead
+    # of looping. The container consumer role loops by default (a live service);
+    # the offline broker smoke sets this so a single drain is deterministic.
+    consumer_oneshot: bool = False
+
     # Local store locations. A relative filesystem path is neither an endpoint
     # nor a secret; example overrides live in .env.example.
     raw_store_path: Path = Path("data/raw")

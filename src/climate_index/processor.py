@@ -17,7 +17,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from climate_index.adapters.duckdb import DuckDBAggregateStore, DuckDBRawStore
 from climate_index.adapters.memory import MemoryTransport
 from climate_index.config import Settings, get_settings
 from climate_index.core.engine import compute_records
@@ -26,6 +25,7 @@ from climate_index.core.validation import ValidationGate
 from climate_index.interfaces import AggregateStore, RawStore, Transport
 from climate_index.logging_utils import StructuredLogger, get_logger
 from climate_index.producer import run_producer
+from climate_index.store_factory import build_aggregate_store, build_raw_store, close_if_supported
 
 
 @dataclass(frozen=True)
@@ -116,8 +116,11 @@ def main() -> None:
     """Entry point for ``make run_processor`` on the in-memory path (no Kafka).
 
     Populates a MemoryTransport via the producer, then runs the processor against
-    the DuckDB stores whose paths come from config, and logs the per-region
-    series lengths read back through the store to show the write-then-read path.
+    the stores the composition root builds from config (DuckDB locally, the AWS
+    fan-out when ``CII_AGGREGATE_BACKEND=aws``), and logs the per-region series
+    lengths read back through the store to show the write-then-read path. Cleanup
+    routes through :func:`close_if_supported` because the AWS stores hold no
+    connection to close.
     """
     settings = get_settings()
     log = get_logger("processor", _log_level(settings.log_level))
@@ -125,16 +128,16 @@ def main() -> None:
     transport = MemoryTransport()
     run_producer(transport, logger=log)
 
-    aggregate_store = DuckDBAggregateStore(settings.aggregate_store_path)
-    raw_store = DuckDBRawStore(settings.raw_store_path / "raw_events.duckdb")
+    aggregate_store = build_aggregate_store(settings)
+    raw_store = build_raw_store(settings)
     try:
         records = run_processor(transport, aggregate_store, raw_store, settings, logger=log)
         for region in settings.region_list:
             series = aggregate_store.read_region_series(region)
             log.event("region_series", region=region, rows=len(series))
     finally:
-        aggregate_store.close()
-        raw_store.close()
+        close_if_supported(aggregate_store)
+        close_if_supported(raw_store)
 
     log.event("processor_main_complete", records=records)
 

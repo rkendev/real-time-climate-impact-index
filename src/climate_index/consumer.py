@@ -28,6 +28,12 @@ from climate_index.core.models import SatelliteEvent, WeatherEvent
 from climate_index.core.validation import ValidationGate
 from climate_index.interfaces import AggregateStore, CommittableConsumer, RawStore
 from climate_index.logging_utils import StructuredLogger, get_logger
+from climate_index.store_factory import build_aggregate_store, build_raw_store, close_if_supported
+
+# The service consumer idles this long between drains (a live loop, not a busy
+# spin). Short enough that a demo sees new windows promptly, long enough to avoid
+# a tight poll loop when the broker is quiet.
+_IDLE_POLL_SECONDS = 2.0
 
 
 @dataclass(frozen=True)
@@ -116,16 +122,46 @@ def run_consumer_once(
     return run
 
 
+def run_consumer_loop(
+    consumer: CommittableConsumer,
+    aggregate_store: AggregateStore,
+    raw_store: RawStore,
+    settings: Settings,
+    *,
+    sleep: Callable[[float], None] | None = None,
+    logger: StructuredLogger | None = None,
+) -> int:
+    """Drain the consumer repeatedly until stopped; return the passes run.
+
+    The container consumer role is a live service, so it drains, then idles a
+    beat, then drains again, forever (each pass reuses the same consumer, stores,
+    and offsets). ``settings.consumer_oneshot`` collapses this to a single drain so
+    the offline broker smoke is deterministic: produce a batch, drain once, assert.
+    ``sleep`` is injected so a test can drive the loop without wall-clock waits.
+    """
+    log = logger if logger is not None else get_logger("consumer")
+    nap = sleep if sleep is not None else _default_sleep
+
+    passes = 0
+    while True:
+        run_consumer_once(consumer, aggregate_store, raw_store, settings, logger=log)
+        passes += 1
+        if settings.consumer_oneshot:
+            break
+        nap(_IDLE_POLL_SECONDS)
+    return passes
+
+
 def main() -> None:
-    """Entry point for the Kafka consumer path (deferred until infra is up).
+    """Entry point for the Kafka consumer path (``python -m climate_index.consumer``).
 
     With no broker configured this is a safe no-op that never imports the Kafka
     client. When a broker is configured, the Kafka committable consumer is
-    imported lazily here (the only place it is referenced) and one pass runs
-    against the DuckDB stores.
+    imported lazily here (the only place it is referenced) and the consume loop
+    runs against the stores the composition root builds from config (DuckDB
+    locally, the AWS fan-out on ``CII_AGGREGATE_BACKEND=aws``). Cleanup routes
+    through :func:`close_if_supported` because the AWS stores hold no connection.
     """
-    from climate_index.adapters.duckdb import DuckDBAggregateStore, DuckDBRawStore
-
     settings = get_settings()
     log = get_logger("consumer", _log_level(settings.log_level))
 
@@ -136,14 +172,20 @@ def main() -> None:
     from climate_index.adapters.kafka import KafkaCommittableConsumer
 
     consumer = KafkaCommittableConsumer(settings.transport_bootstrap_servers)
-    aggregate_store = DuckDBAggregateStore(settings.aggregate_store_path)
-    raw_store = DuckDBRawStore(settings.raw_store_path / "raw_events.duckdb")
+    aggregate_store = build_aggregate_store(settings)
+    raw_store = build_raw_store(settings)
     try:
-        run_consumer_once(consumer, aggregate_store, raw_store, settings, logger=log)
+        run_consumer_loop(consumer, aggregate_store, raw_store, settings, logger=log)
     finally:
-        aggregate_store.close()
-        raw_store.close()
+        close_if_supported(aggregate_store)
+        close_if_supported(raw_store)
         consumer.close()
+
+
+def _default_sleep(seconds: float) -> None:
+    import time
+
+    time.sleep(seconds)
 
 
 def _log_level(name: str) -> int:
