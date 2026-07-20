@@ -11,3 +11,8 @@ streamlit==1.59.2
 boto3==1.43.51
 pyiceberg[glue,pyarrow]==0.11.1
 pyarrow==24.0.0
+# Kafka client for the live-broker path (ADR-0002). Imported lazily inside the
+# transport adapter only, so offline test collection never loads it; the
+# container stack and the P2-T3 broker smoke are the first users. The wheel
+# bundles librdkafka (aarch64 and x86_64), so the slim image needs no build step.
+confluent-kafka==2.11.1

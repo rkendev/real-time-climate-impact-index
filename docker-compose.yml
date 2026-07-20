@@ -1,0 +1,95 @@
+# The container stack (ADR-0003, docs/50_cloud_strategy.md): a single-node Kafka
+# broker in KRaft mode plus the three app roles from one image. The same file
+# serves both environments. Locally it builds climate-index:local and runs the
+# DuckDB backend with no spend; on the box, user_data sets CII_IMAGE to the ECR
+# image and passes an --env-file that flips the backend to aws, so nothing here
+# changes between local and cloud except the injected CII_ values.
+#
+# Every app value is a CII_ variable with a safe local default, so an --env-file
+# override reconfigures the stack without editing this file (INV-1: no secret or
+# account-specific literal here; the broker address is a compose service name).
+
+x-app-env: &app-env
+  CII_TRANSPORT_BOOTSTRAP_SERVERS: ${CII_TRANSPORT_BOOTSTRAP_SERVERS:-kafka:9092}
+  CII_AGGREGATE_BACKEND: ${CII_AGGREGATE_BACKEND:-duckdb}
+  CII_REGIONS: ${CII_REGIONS:-EUR,NAM,AFR,ASI}
+  CII_LOG_LEVEL: ${CII_LOG_LEVEL:-INFO}
+  CII_AGGREGATE_STORE_PATH: ${CII_AGGREGATE_STORE_PATH:-/data/aggregates.duckdb}
+  CII_RAW_STORE_PATH: ${CII_RAW_STORE_PATH:-/data/raw}
+  CII_AWS_REGION: ${CII_AWS_REGION:-}
+  CII_AWS_ENDPOINT_URL: ${CII_AWS_ENDPOINT_URL:-}
+  CII_ICEBERG_WAREHOUSE_BUCKET: ${CII_ICEBERG_WAREHOUSE_BUCKET:-}
+  CII_ICEBERG_NAMESPACE: ${CII_ICEBERG_NAMESPACE:-climate_index}
+  CII_ICEBERG_TABLE: ${CII_ICEBERG_TABLE:-climate_index}
+  CII_ICEBERG_CATALOG_PROPERTIES: ${CII_ICEBERG_CATALOG_PROPERTIES:-}
+  CII_DYNAMO_TABLE: ${CII_DYNAMO_TABLE:-}
+  CII_RAW_S3_BUCKET: ${CII_RAW_S3_BUCKET:-}
+  CII_RAW_S3_PREFIX: ${CII_RAW_S3_PREFIX:-raw}
+  CII_DASHBOARD_PORT: ${CII_DASHBOARD_PORT:-8501}
+  CII_CONSUMER_ONESHOT: ${CII_CONSUMER_ONESHOT:-}
+
+services:
+  kafka:
+    image: apache/kafka:3.9.1
+    hostname: kafka
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092,CONTROLLER://0.0.0.0:9093
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+    healthcheck:
+      test: ["CMD", "/opt/kafka/bin/kafka-broker-api-versions.sh", "--bootstrap-server", "localhost:9092"]
+      interval: 10s
+      timeout: 10s
+      retries: 12
+      start_period: 20s
+
+  producer:
+    image: ${CII_IMAGE:-climate-index:local}
+    build:
+      context: .
+    command: ["producer"]
+    environment: *app-env
+    depends_on:
+      kafka:
+        condition: service_healthy
+    volumes:
+      - cii-data:/data
+    restart: "no"
+
+  consumer:
+    image: ${CII_IMAGE:-climate-index:local}
+    build:
+      context: .
+    command: ["consumer"]
+    environment: *app-env
+    depends_on:
+      kafka:
+        condition: service_healthy
+    volumes:
+      - cii-data:/data
+    restart: unless-stopped
+
+  dashboard:
+    image: ${CII_IMAGE:-climate-index:local}
+    build:
+      context: .
+    command: ["dashboard"]
+    environment: *app-env
+    ports:
+      - "${CII_DASHBOARD_PORT:-8501}:${CII_DASHBOARD_PORT:-8501}"
+    volumes:
+      - cii-data:/data
+    restart: unless-stopped
+
+volumes:
+  cii-data:

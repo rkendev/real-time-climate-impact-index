@@ -1,0 +1,27 @@
+# Keep the build context tiny and secret-free. Only src/, app/, and
+# requirements.txt are needed to build the image; everything else is excluded so
+# no state, credential, or local artifact can enter a layer.
+.git
+.gitignore
+.venv
+data
+infra
+tests
+docs
+adr
+scripts
+*.md
+.env
+.env.*
+!.env.example
+.smoke_ok
+**/__pycache__
+*.py[cod]
+.pytest_cache
+.ruff_cache
+.mypy_cache
+.terraform
+*.tfstate
+*.tfstate.*
+*.tfvars
+docker-compose*.yml
