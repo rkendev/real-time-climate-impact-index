@@ -13,9 +13,11 @@ from __future__ import annotations
 from climate_index.adapters.aws.dynamo_reader import DynamoReadOnlyAggregateStore
 from climate_index.adapters.aws.dynamo_store import DynamoAggregateStore
 from climate_index.adapters.aws.iceberg_store import IcebergAggregateStore
+from climate_index.adapters.aws.s3_raw_store import S3RawStore
 
 __all__ = [
     "DynamoAggregateStore",
     "DynamoReadOnlyAggregateStore",
     "IcebergAggregateStore",
+    "S3RawStore",
 ]
