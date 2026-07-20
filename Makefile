@@ -8,7 +8,7 @@ export PYTHONPATH := src
 
 .PHONY: bootstrap hooks lint type-check test infra_up run_producer run_processor smoke ui \
 	tf-fmt tf-validate tf-plan teardown-audit pre-deploy-gate container-smoke \
-	image-build image-push
+	image-build image-push verify-at5 verify-nfr-p3
 
 # Dummy credentials and provider skip flags let terraform validate and plan run
 # with zero AWS contact and zero spend. TF_STACKS is the full set; TF_PLAN_STACKS
@@ -46,7 +46,7 @@ lint:
 	$(BIN)/ruff format --check .
 
 type-check:
-	$(BIN)/mypy src scripts/teardown_audit.py
+	$(BIN)/mypy src scripts/teardown_audit.py scripts/verify_at5_glue.py scripts/verify_nfr_p3.py
 
 test:
 	$(BIN)/pytest
@@ -133,6 +133,16 @@ image-push:
 	region=$$(echo "$$registry" | cut -d. -f4); \
 	aws ecr get-login-password --region "$$region" | docker login --username AWS --password-stdin "$$registry"; \
 	docker buildx build --platform linux/arm64 -t $(ECR_REPO):$(IMAGE_TAG) --push .
+
+# Paid-window verifications (exit gate G2). Both require the AWS backend and run
+# against real AWS; the measurement logic is unit-tested offline. AT-5 replays a
+# window and asserts exactly one Iceberg row against the real Glue catalog; NFR-P3
+# seeds a full day of windows and asserts the DynamoDB read p95 is under one second.
+verify-at5:
+	$(BIN)/python scripts/verify_at5_glue.py
+
+verify-nfr-p3:
+	$(BIN)/python scripts/verify_nfr_p3.py
 
 # Tag-based teardown audit (AT-11). Region, tag, and the optional endpoint come
 # from config. The real post-teardown run is P2-T3; the moto test proves it here.
