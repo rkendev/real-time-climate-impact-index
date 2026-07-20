@@ -21,12 +21,14 @@ x-app-env: &app-env
   CII_ICEBERG_WAREHOUSE_BUCKET: ${CII_ICEBERG_WAREHOUSE_BUCKET:-}
   CII_ICEBERG_NAMESPACE: ${CII_ICEBERG_NAMESPACE:-climate_index}
   CII_ICEBERG_TABLE: ${CII_ICEBERG_TABLE:-climate_index}
-  CII_ICEBERG_CATALOG_PROPERTIES: ${CII_ICEBERG_CATALOG_PROPERTIES:-}
+  # A dict-typed field: the default must be valid JSON (an empty object), never an
+  # empty string, or the settings parser rejects it before the local backend even
+  # starts. On the AWS backend this is overridden with the Glue catalog properties.
+  CII_ICEBERG_CATALOG_PROPERTIES: "${CII_ICEBERG_CATALOG_PROPERTIES:-{}}"
   CII_DYNAMO_TABLE: ${CII_DYNAMO_TABLE:-}
   CII_RAW_S3_BUCKET: ${CII_RAW_S3_BUCKET:-}
   CII_RAW_S3_PREFIX: ${CII_RAW_S3_PREFIX:-raw}
   CII_DASHBOARD_PORT: ${CII_DASHBOARD_PORT:-8501}
-  CII_CONSUMER_ONESHOT: ${CII_CONSUMER_ONESHOT:-}
 
 services:
   kafka:

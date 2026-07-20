@@ -7,7 +7,7 @@ BIN := $(VENV)/bin
 export PYTHONPATH := src
 
 .PHONY: bootstrap hooks lint type-check test infra_up run_producer run_processor smoke ui \
-	tf-fmt tf-validate tf-plan teardown-audit pre-deploy-gate
+	tf-fmt tf-validate tf-plan teardown-audit pre-deploy-gate container-smoke
 
 # Dummy credentials and provider skip flags let terraform validate and plan run
 # with zero AWS contact and zero spend. TF_STACKS is the full set; TF_PLAN_STACKS
@@ -75,6 +75,13 @@ smoke:
 # seeded by run_processor; performs no computation and no writes (INV-2).
 ui:
 	$(BIN)/streamlit run app/dashboard.py
+
+# End-to-end container smoke through a live Kafka broker (UC-6, FR-6, FR-7). Builds
+# the app image, runs producer to consumer to store to dashboard on the local
+# backend, and asserts the aggregate is non-empty and duplicate-free. Exercises
+# the live-broker path the in-memory smoke cannot; no AWS, no spend.
+container-smoke:
+	bash scripts/container_smoke.sh
 
 # Formatting gate for the .tf files (kept green alongside the Python gates).
 tf-fmt:
