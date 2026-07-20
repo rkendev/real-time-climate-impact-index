@@ -11,12 +11,14 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
+from climate_index.adapters.aws.dynamo_reader import DynamoReadOnlyAggregateStore
 from climate_index.adapters.aws.iceberg_store import IcebergAggregateStore
 from climate_index.adapters.composite import CompositeAggregateStore
 from climate_index.adapters.duckdb import DuckDBAggregateStore
+from climate_index.adapters.duckdb.reader import DuckDBReadOnlyAggregateStore
 from climate_index.config import Settings
-from climate_index.interfaces import AggregateStore
-from climate_index.store_factory import build_aggregate_store
+from climate_index.interfaces import AggregateStore, ReadOnlyAggregateStore
+from climate_index.store_factory import build_aggregate_store, build_readonly_aggregate_store
 
 
 def test_duckdb_backend_returns_duckdb_store(tmp_path: Path) -> None:
@@ -56,3 +58,32 @@ def test_aws_backend_returns_fanout_that_writes_both(aws_ctx: Any, make_record: 
         table_name=aws_ctx.table_name,
     )
     assert len(durable.read_region_series("EUR")) == 1
+
+
+def test_readonly_duckdb_backend_returns_duckdb_reader(tmp_path: Path) -> None:
+    settings = Settings(
+        aggregate_backend="duckdb",
+        aggregate_store_path=tmp_path / "aggregates.duckdb",
+    )
+    # Seed the file so the read-only connection (which requires an existing db) opens.
+    DuckDBAggregateStore(settings.aggregate_store_path).close()
+    reader = build_readonly_aggregate_store(settings)
+    assert isinstance(reader, ReadOnlyAggregateStore)
+    assert isinstance(reader, DuckDBReadOnlyAggregateStore)
+
+
+def test_readonly_aws_backend_returns_serving_reader_and_is_write_free() -> None:
+    # The AWS read path resolves to the DynamoDB serving reader by config alone.
+    # Construction touches no cloud SDK (the client is lazy), so no moto is needed.
+    settings = Settings(
+        aggregate_backend="aws",
+        aws_region="us-east-1",
+        dynamo_table="climate-index-serving",
+    )
+    reader = build_readonly_aggregate_store(settings)
+    assert isinstance(reader, ReadOnlyAggregateStore)
+    assert isinstance(reader, DynamoReadOnlyAggregateStore)
+    # Read-only: the serving reader exposes a region read and nothing that writes.
+    assert hasattr(reader, "read_region_series")
+    assert not hasattr(reader, "upsert")
+    assert not hasattr(reader, "append")

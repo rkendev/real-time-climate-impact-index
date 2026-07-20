@@ -2,10 +2,13 @@
 
 A Streamlit page with a region selector, a time series of the impact index over
 recent windows, the current value, its verbal label, and its confidence grade.
-It reads the aggregate store only through
-:class:`~climate_index.adapters.duckdb.reader.DuckDBReadOnlyAggregateStore`, a
-read-only connection, and it imports no index or feature computation and no store
-writer. The verbal label comes from the display-safe
+It reads the aggregate store only through a read-only store built by
+:func:`~climate_index.store_factory.build_readonly_aggregate_store`, which selects
+the DuckDB reader locally or the DynamoDB serving reader on AWS by config; both
+expose only reads. The page imports no index or feature computation and no store
+writer, and it is typed against
+:class:`~climate_index.interfaces.store.ReadOnlyAggregateStore`, so it holds no
+write capability. The verbal label comes from the display-safe
 :func:`~climate_index.labels.verbal_label`, not from the compute core, so the
 page performs no index computation and issues no writes (INV-2, FR-8, AT-6).
 
@@ -23,9 +26,10 @@ from typing import Any
 
 import streamlit as st
 
-from climate_index.adapters.duckdb.reader import DuckDBReadOnlyAggregateStore
 from climate_index.config import Settings, get_settings
+from climate_index.interfaces.store import ReadOnlyAggregateStore
 from climate_index.labels import verbal_label
+from climate_index.store_factory import build_readonly_aggregate_store
 
 
 @dataclass(frozen=True)
@@ -62,7 +66,7 @@ def build_region_view(rows: Sequence[Mapping[str, Any]], region: str) -> RegionV
     )
 
 
-def render(store: DuckDBReadOnlyAggregateStore, settings: Settings) -> None:
+def render(store: ReadOnlyAggregateStore, settings: Settings) -> None:
     """Render the read-only page for the selected region."""
     st.title("Real-Time Climate Impact Index")
     st.caption("Read-only view of the aggregate store (one row per region per window).")
@@ -85,18 +89,27 @@ def render(store: DuckDBReadOnlyAggregateStore, settings: Settings) -> None:
 
 
 def main() -> None:
-    """Open the read-only store from config and render (the ``make ui`` entry)."""
+    """Open the configured read-only store and render (the ``make ui`` entry).
+
+    The store is chosen by config: the DuckDB reader locally, the DynamoDB serving
+    reader on AWS. Only the local backend has a file to check for, so the
+    seed-first hint is guarded to that backend; on AWS the reader queries the
+    serving table directly. The close is guarded because not every reader holds a
+    connection to close (the DynamoDB reader does not).
+    """
     settings = get_settings()
-    if not settings.aggregate_store_path.exists():
+    if settings.aggregate_backend == "duckdb" and not settings.aggregate_store_path.exists():
         st.title("Real-Time Climate Impact Index")
         st.info("No aggregate store found. Run `make run_processor` to seed it, then reload.")
         return
 
-    store = DuckDBReadOnlyAggregateStore(settings.aggregate_store_path)
+    store = build_readonly_aggregate_store(settings)
     try:
         render(store, settings)
     finally:
-        store.close()
+        close = getattr(store, "close", None)
+        if callable(close):
+            close()
 
 
 if __name__ == "__main__":

@@ -81,11 +81,18 @@ def test_dashboard_imports_no_writer_or_compute_path() -> None:
 
 def test_dashboard_reads_read_only_and_labels_for_display() -> None:
     modules, names = _imports(DASHBOARD.read_text(encoding="utf-8"))
-    # It reads through the read-only reader and formats with the display-safe label.
-    assert "DuckDBReadOnlyAggregateStore" in names
+    # It reads through the config-driven read-only factory (never a concrete writer
+    # or a hardcoded backend reader) and formats with the display-safe label. It is
+    # typed against the read-only Protocol, so it holds no write capability.
+    assert "build_readonly_aggregate_store" in names
+    assert "ReadOnlyAggregateStore" in names
     assert "verbal_label" in names
-    assert "climate_index.adapters.duckdb.reader" in modules
+    assert "climate_index.store_factory" in modules
     assert "climate_index.labels" in modules
+    # The factory is the only door to a reader: no concrete backend reader is
+    # imported straight into the dashboard.
+    assert "climate_index.adapters.duckdb.reader" not in modules
+    assert "climate_index.adapters.aws.dynamo_reader" not in modules
 
 
 def test_dashboard_source_issues_no_writes() -> None:

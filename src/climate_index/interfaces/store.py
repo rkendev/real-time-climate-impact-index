@@ -36,6 +36,21 @@ class AggregateStore(Protocol):
 
 
 @runtime_checkable
+class ReadOnlyAggregateStore(Protocol):
+    """The read-only slice of the aggregate store the dashboard depends on (UC-5).
+
+    Exposes only :meth:`read_region_series`, never a writer, so a component typed
+    against this Protocol (the dashboard) holds no write capability (INV-2, AT-6).
+    Both the local DuckDB reader and the DynamoDB serving reader satisfy it, so the
+    read path is a config-driven adapter swap at the composition root.
+    """
+
+    def read_region_series(self, region: str) -> Sequence[Mapping[str, Any]]:
+        """Return the aggregate rows for one region, ordered by window start."""
+        ...
+
+
+@runtime_checkable
 class RawStore(Protocol):
     """Append-only persistence for validated raw events (FR-7)."""
 
