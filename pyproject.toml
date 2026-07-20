@@ -15,6 +15,9 @@ python_version = "3.12"
 strict = true
 plugins = ["pydantic.mypy"]
 files = ["src"]
+# Resolve first-party imports (climate_index) when type-checking the scripts/
+# audit alongside src, without adding scripts to the checked file set wholesale.
+mypy_path = "src"
 
 # The Kafka client is intentionally not installed this track (it is imported
 # lazily in the adapter run path and pinned in the infra track). Declare it as a

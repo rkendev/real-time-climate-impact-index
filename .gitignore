@@ -15,6 +15,7 @@ data/
 *.tfstate
 *.tfstate.*
 infra/**/*.tfvars
+infra/**/zz_local_backend_override.tf
 
 # Python caches and tool state
 __pycache__/
