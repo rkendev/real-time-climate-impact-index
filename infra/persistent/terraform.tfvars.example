@@ -1,0 +1,18 @@
+# Copy to terraform.tfvars (git-ignored) and fill in real values. Placeholders
+# only here; this is the single kind of file where example values may appear.
+# project_tag is intentionally omitted: it is injected from config.project_tag
+# via TF_VAR_project_tag by the Make targets, so it cannot drift from the audit.
+
+aws_region               = "us-east-1"
+account_id               = "000000000000"
+iceberg_warehouse_bucket = "your-climate-index-iceberg-warehouse"
+raw_s3_bucket            = "your-climate-index-raw-store"
+dynamo_table             = "climate-index-serving"
+notification_email       = "you@example.com"
+
+# Optional overrides (defaults shown):
+# iceberg_namespace     = "climate_index"
+# iceberg_table         = "climate_index"
+# budget_limit_usd      = 50
+# budget_alert_usd      = 12
+# force_destroy_buckets = false
