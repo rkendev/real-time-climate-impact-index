@@ -124,6 +124,13 @@ class Settings(BaseSettings):
     aws_region: str | None = None
     aws_endpoint_url: str | None = None
 
+    # Cost-allocation tag value (ADR-0005), the single definition of the project
+    # tag. The teardown audit (AT-11) filters on it, and Terraform receives the
+    # same value through TF_VAR_project_tag injected from this field by the Make
+    # targets, so the tag the audit checks and the tag applied to resources
+    # cannot drift. A plain structural label, neither an endpoint nor a secret.
+    project_tag: str = "climate-index"
+
     # S3 Iceberg aggregate-of-record (ADR-0003). The warehouse bucket is a
     # connection detail (None until provisioned); the namespace and table name
     # are plain structural identifiers, neither endpoints nor secrets, so they

@@ -8,6 +8,14 @@
 data/
 .smoke_ok
 
+# Terraform working dirs, state, and real tfvars (never committed; INV-1, ADR-0005).
+# The *.tfvars.example files are committed placeholders; real *.tfvars are not.
+.terraform/
+.terraform.lock.hcl
+*.tfstate
+*.tfstate.*
+infra/**/*.tfvars
+
 # Python caches and tool state
 __pycache__/
 *.py[cod]

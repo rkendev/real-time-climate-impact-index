@@ -1,0 +1,6 @@
+# Copy to terraform.tfvars (git-ignored) and fill in real values before the
+# one-time bootstrap apply (P2-T3). project_tag is intentionally omitted: it is
+# injected from config.project_tag via TF_VAR_project_tag by the Make targets.
+
+aws_region   = "us-east-1"
+state_bucket = "your-unique-climate-index-tfstate-bucket"
