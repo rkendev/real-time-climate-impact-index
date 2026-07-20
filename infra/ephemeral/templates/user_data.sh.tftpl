@@ -1,32 +1,103 @@
 #!/usr/bin/env bash
-# Instance bootstrap for the climate index compute box (ADR-0003 EC2 shape).
+# Instance bootstrap for the climate index compute box (ADR-0003 EC2 shape, ADR-0006).
 #
-# Installs docker and prepares the CII_ environment the container stack consumes.
-# The concrete docker-compose project, the Dockerfiles, and the image-delivery
-# mechanism are the P2-T3 seam: this script prepares the host and the environment
-# file; P2-T3 adds the compose project and starts it. Nothing here starts a
-# container in P2-T2.
+# Installs docker and the compose plugin, writes the CII_ environment and a compose
+# project, authenticates to ECR with the instance role (no static credential,
+# INV-1), pulls the one app image built and pushed from the host, and starts the
+# broker, consumer, and dashboard. The producer is defined but not auto-started:
+# the demo runs a bounded batch on demand. Every interpolated value is a Terraform
+# input, so no secret, key, or account literal is authored here.
 set -euo pipefail
 
 dnf install -y docker || yum install -y docker
 systemctl enable --now docker
 
-# Docker Compose plugin directory (ARM). P2-T3 pins the exact plugin version and
-# its delivery method.
-mkdir -p /usr/local/lib/docker/cli-plugins
+# The AWS CLI provides the ECR login token exchange; ensure it is present.
+command -v aws >/dev/null 2>&1 || dnf install -y awscli || yum install -y awscli || true
 
-# CII_ environment wired from the persistent stack outputs, same names as the
-# local config so the containers need no code change (INV-1: no literal here, all
-# values are Terraform inputs).
+# Docker Compose plugin (arm64), pinned for a reproducible box (ADR-0006).
+mkdir -p /usr/local/lib/docker/cli-plugins
+curl -fsSL "https://github.com/docker/compose/releases/download/${compose_plugin_version}/docker-compose-linux-aarch64" \
+	-o /usr/local/lib/docker/cli-plugins/docker-compose
+chmod +x /usr/local/lib/docker/cli-plugins/docker-compose
+
+# CII_ environment wired from the persistent stack outputs, the same names the
+# local config uses so the containers need no code change (INV-1: no literal here,
+# all values are Terraform inputs). The Glue catalog properties are valid JSON so
+# the settings parser accepts them on the AWS backend.
 cat > /etc/climate-index.env <<'ENV'
 CII_AGGREGATE_BACKEND=aws
 CII_AWS_REGION=${aws_region}
 CII_ICEBERG_WAREHOUSE_BUCKET=${iceberg_warehouse_bucket}
-CII_RAW_S3_BUCKET=${raw_s3_bucket}
-CII_DYNAMO_TABLE=${dynamo_table}
 CII_ICEBERG_NAMESPACE=${iceberg_namespace}
+CII_ICEBERG_TABLE=${iceberg_table}
+CII_ICEBERG_CATALOG_PROPERTIES={"type": "glue"}
+CII_DYNAMO_TABLE=${dynamo_table}
+CII_RAW_S3_BUCKET=${raw_s3_bucket}
+CII_RAW_S3_PREFIX=raw
+CII_TRANSPORT_BOOTSTRAP_SERVERS=kafka:9092
+CII_DASHBOARD_PORT=${dashboard_port}
 ENV
 
-# SEAM (P2-T3): author docker-compose.yml and the Dockerfiles, deliver the
-# images, then start the stack, for example:
-#   docker compose --env-file /etc/climate-index.env up -d
+# The compose project the box runs. It pulls the pushed image rather than building
+# (no source and no build context on the box), and every app service reads the
+# CII_ env file above. The image reference is the concrete pushed tag.
+mkdir -p /opt/climate-index
+cat > /opt/climate-index/docker-compose.yml <<'COMPOSE'
+services:
+  kafka:
+    image: apache/kafka:3.9.1
+    hostname: kafka
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092,CONTROLLER://0.0.0.0:9093
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+    healthcheck:
+      test: ["CMD", "/opt/kafka/bin/kafka-broker-api-versions.sh", "--bootstrap-server", "kafka:9092"]
+      interval: 10s
+      timeout: 10s
+      retries: 12
+      start_period: 20s
+  consumer:
+    image: ${app_image}
+    command: ["consumer"]
+    env_file: [/etc/climate-index.env]
+    depends_on:
+      kafka:
+        condition: service_healthy
+    restart: unless-stopped
+  dashboard:
+    image: ${app_image}
+    command: ["dashboard"]
+    env_file: [/etc/climate-index.env]
+    ports:
+      - "${dashboard_port}:${dashboard_port}"
+    restart: unless-stopped
+  producer:
+    image: ${app_image}
+    command: ["producer"]
+    env_file: [/etc/climate-index.env]
+    depends_on:
+      kafka:
+        condition: service_healthy
+    restart: "no"
+COMPOSE
+
+# Authenticate to ECR with the instance role (no static key) and start the stack.
+# Only the long-running services come up; the producer is run on demand for the
+# bounded demo batch (docker compose run --rm producer).
+aws ecr get-login-password --region ${aws_region} |
+	docker login --username AWS --password-stdin ${ecr_registry}
+cd /opt/climate-index
+docker compose pull
+docker compose up -d --no-build kafka consumer dashboard

@@ -9,6 +9,13 @@ resource "aws_iam_instance_profile" "processor" {
   role        = var.processor_role_name
 }
 
+locals {
+  # The registry host to docker login to, and the concrete image reference the box
+  # pulls, both derived from the persistent stack's ECR output (ADR-0006).
+  ecr_registry = split("/", var.ecr_repository_url)[0]
+  app_image    = "${var.ecr_repository_url}:${var.image_tag}"
+}
+
 # The t4g (ARM) instance is the primary hourly-billing resource, together with its
 # auto-assigned public IPv4. Destroying this stack removes both.
 resource "aws_instance" "app" {
@@ -25,6 +32,11 @@ resource "aws_instance" "app" {
     raw_s3_bucket            = var.raw_s3_bucket
     dynamo_table             = var.dynamo_table
     iceberg_namespace        = var.iceberg_namespace
+    iceberg_table            = var.iceberg_table
+    dashboard_port           = var.dashboard_port
+    ecr_registry             = local.ecr_registry
+    app_image                = local.app_image
+    compose_plugin_version   = var.compose_plugin_version
   })
 
   # IMDSv2 only.

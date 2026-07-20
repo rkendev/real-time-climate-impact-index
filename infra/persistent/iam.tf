@@ -21,6 +21,9 @@ locals {
   glue_catalog_arn  = "arn:aws:glue:${var.aws_region}:${var.account_id}:catalog"
   glue_database_arn = "arn:aws:glue:${var.aws_region}:${var.account_id}:database/${var.iceberg_namespace}"
   glue_table_arn    = "arn:aws:glue:${var.aws_region}:${var.account_id}:table/${var.iceberg_namespace}/${var.iceberg_table}"
+  # The ECR repo lives in this same stack; reference the resource so the ARN needs
+  # no manual account/region assembly and validate stays offline.
+  ecr_repository_arn = aws_ecr_repository.app.arn
 }
 
 data "aws_iam_policy_document" "ec2_assume" {
@@ -76,6 +79,26 @@ data "aws_iam_policy_document" "processor" {
       "dynamodb:DescribeTable",
     ]
     resources = [local.dynamo_arn]
+  }
+
+  # Pull-only access to the one app image (ADR-0006). GetAuthorizationToken is not
+  # resource-scoped by ECR, so it is a separate statement on "*"; the layer and
+  # image reads are scoped to this project's repository. No push permission: the
+  # image is pushed from the build host, never from the box.
+  statement {
+    sid       = "EcrAuthToken"
+    actions   = ["ecr:GetAuthorizationToken"]
+    resources = ["*"]
+  }
+
+  statement {
+    sid = "EcrPull"
+    actions = [
+      "ecr:BatchGetImage",
+      "ecr:GetDownloadUrlForLayer",
+      "ecr:BatchCheckLayerAvailability",
+    ]
+    resources = [local.ecr_repository_arn]
   }
 }
 

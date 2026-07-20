@@ -7,7 +7,8 @@ BIN := $(VENV)/bin
 export PYTHONPATH := src
 
 .PHONY: bootstrap hooks lint type-check test infra_up run_producer run_processor smoke ui \
-	tf-fmt tf-validate tf-plan teardown-audit pre-deploy-gate container-smoke
+	tf-fmt tf-validate tf-plan teardown-audit pre-deploy-gate container-smoke \
+	image-build image-push
 
 # Dummy credentials and provider skip flags let terraform validate and plan run
 # with zero AWS contact and zero spend. TF_STACKS is the full set; TF_PLAN_STACKS
@@ -111,6 +112,27 @@ tf-plan:
 			$(TF) -chdir=$$dir plan -input=false -var-file=terraform.tfvars.example; \
 		rc=$$?; rm -f $$ovr; [ $$rc -eq 0 ] || exit $$rc; \
 	done
+
+# Build the one app image for the t4g box (ADR-0006). The box is arm64 (Graviton)
+# while the build host is x86_64, so the image MUST be built for linux/arm64 or it
+# fails at boot with an exec-format error. ECR_REPO is the repository URL from the
+# persistent stack output; IMAGE_TAG defaults to the short git sha. This is a
+# paid-window step (the artifact the box pulls); building itself does not spend.
+IMAGE_TAG ?= $(shell git rev-parse --short HEAD 2>/dev/null || echo dev)
+
+image-build:
+	@test -n "$(ECR_REPO)" || { echo "set ECR_REPO=<ecr repository url> (terraform output ecr_repository_url)"; exit 2; }
+	docker buildx build --platform linux/arm64 -t $(ECR_REPO):$(IMAGE_TAG) --load .
+
+# Push the arm64 image to ECR. Logs in with the operator workstation credentials
+# (never the box), deriving the registry host and region from ECR_REPO, then builds
+# and pushes for arm64 in one step. The box pulls this image via its instance role.
+image-push:
+	@test -n "$(ECR_REPO)" || { echo "set ECR_REPO=<ecr repository url> (terraform output ecr_repository_url)"; exit 2; }
+	@registry=$$(echo "$(ECR_REPO)" | cut -d/ -f1); \
+	region=$$(echo "$$registry" | cut -d. -f4); \
+	aws ecr get-login-password --region "$$region" | docker login --username AWS --password-stdin "$$registry"; \
+	docker buildx build --platform linux/arm64 -t $(ECR_REPO):$(IMAGE_TAG) --push .
 
 # Tag-based teardown audit (AT-11). Region, tag, and the optional endpoint come
 # from config. The real post-teardown run is P2-T3; the moto test proves it here.

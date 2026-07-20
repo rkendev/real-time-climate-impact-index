@@ -31,7 +31,7 @@ required_vars_for() {
   case "$1" in
   bootstrap) echo "aws_region state_bucket project_tag" ;;
   persistent) echo "aws_region account_id project_tag iceberg_warehouse_bucket raw_s3_bucket dynamo_table notification_email" ;;
-  ephemeral) echo "aws_region project_tag owner_ip ami_id processor_role_name" ;;
+  ephemeral) echo "aws_region project_tag owner_ip ami_id processor_role_name ecr_repository_url image_tag" ;;
   esac
 }
 

@@ -31,7 +31,15 @@ REQUIRED = {
         "dynamo_table",
         "notification_email",
     ],
-    "ephemeral": ["aws_region", "project_tag", "owner_ip", "ami_id", "processor_role_name"],
+    "ephemeral": [
+        "aws_region",
+        "project_tag",
+        "owner_ip",
+        "ami_id",
+        "processor_role_name",
+        "ecr_repository_url",
+        "image_tag",
+    ],
 }
 
 

@@ -11,9 +11,17 @@ iceberg_warehouse_bucket = "your-climate-index-iceberg-warehouse"
 raw_s3_bucket            = "your-climate-index-raw-store"
 dynamo_table             = "climate-index-serving"
 
+# ECR image delivery (ADR-0006). ecr_repository_url comes from the persistent
+# stack output; image_tag is the tag pushed from the host (for example a short git
+# sha) before this stack applies.
+ecr_repository_url = "000000000000.dkr.ecr.us-east-1.amazonaws.com/climate-index-app"
+image_tag          = "v0-0-0"
+
 # Optional overrides (defaults shown):
-# instance_type     = "t4g.medium"
-# dashboard_port    = 8501
-# vpc_cidr          = "10.0.0.0/16"
-# subnet_cidr       = "10.0.1.0/24"
-# iceberg_namespace = "climate_index"
+# instance_type          = "t4g.medium"
+# dashboard_port         = 8501
+# vpc_cidr               = "10.0.0.0/16"
+# subnet_cidr            = "10.0.1.0/24"
+# iceberg_namespace      = "climate_index"
+# iceberg_table          = "climate_index"
+# compose_plugin_version = "v2.40.0"

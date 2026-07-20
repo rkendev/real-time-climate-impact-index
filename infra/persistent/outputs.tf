@@ -36,3 +36,8 @@ output "glue_database" {
   description = "Glue catalog database name (set CII_ICEBERG_NAMESPACE from this)."
   value       = aws_glue_catalog_database.iceberg.name
 }
+
+output "ecr_repository_url" {
+  description = "ECR repository URL the image is pushed to and the box pulls from (ADR-0006). Feed to the ephemeral stack as ecr_repository_url."
+  value       = aws_ecr_repository.app.repository_url
+}

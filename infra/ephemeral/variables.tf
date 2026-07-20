@@ -75,3 +75,25 @@ variable "iceberg_namespace" {
   type        = string
   default     = "climate_index"
 }
+
+variable "iceberg_table" {
+  description = "Iceberg table name in the Glue database; passed as CII_ICEBERG_TABLE. Mirrors config.iceberg_table."
+  type        = string
+  default     = "climate_index"
+}
+
+variable "ecr_repository_url" {
+  description = "ECR repository URL from the persistent stack output (ADR-0006). The box logs in to its registry host and pulls <url>:<image_tag>."
+  type        = string
+}
+
+variable "image_tag" {
+  description = "Tag of the app image to pull and run (for example a short git sha). Built and pushed from the host before this stack applies."
+  type        = string
+}
+
+variable "compose_plugin_version" {
+  description = "Pinned Docker Compose plugin version installed on the box (arm64). Kept explicit so the box build is reproducible."
+  type        = string
+  default     = "v2.40.0"
+}
