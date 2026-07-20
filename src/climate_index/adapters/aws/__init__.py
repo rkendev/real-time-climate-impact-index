@@ -10,6 +10,12 @@ in the run path, so importing this package pulls in no cloud SDK.
 
 from __future__ import annotations
 
+from climate_index.adapters.aws.dynamo_reader import DynamoReadOnlyAggregateStore
+from climate_index.adapters.aws.dynamo_store import DynamoAggregateStore
 from climate_index.adapters.aws.iceberg_store import IcebergAggregateStore
 
-__all__ = ["IcebergAggregateStore"]
+__all__ = [
+    "DynamoAggregateStore",
+    "DynamoReadOnlyAggregateStore",
+    "IcebergAggregateStore",
+]
