@@ -1,7 +1,7 @@
 # ADR-0003: Cloud topology (AWS only, cost-minimizing shape)
 
 Status: decided (cost-constrained; owner chose the cheapest AWS option)
-Date: 2026-07-16 (revised)
+Date: 2026-07-20 (revised)
 Related: `50_cloud_strategy.md`, `adr/0002-stream-processor.md`, NFR-PT1, NFR-PT2, NFR-PT3, NFR-P3, NFR-R1, NFR-SEC4, NFR-C1, NFR-C2, INV-4
 
 ## Context
@@ -19,7 +19,8 @@ Ruled out on cost:
 The cheapest shape:
 
 - Compute and transport: run the same containers used locally (single-node Apache Kafka in KRaft mode, the Python consumer, and the Streamlit dashboard) on one small ARM compute instance (a t4g-class EC2 running docker compose is the cheapest and simplest; ECS Fargate tasks are the slightly more cloud-native alternative at similar cost). Provisioned by infrastructure-as-code and torn down between demos.
-- Aggregate-of-record and raw store: Amazon S3 with Apache Iceberg. Near-zero at rest, and the Iceberg MERGE gives idempotent writes on the natural key (FR-6, NFR-R1, the H4 fix).
+- Aggregate-of-record: Amazon S3 with Apache Iceberg. Near-zero at rest, and the Iceberg MERGE gives idempotent writes on the natural key (FR-6, NFR-R1, the H4 fix).
+- Raw store: plain Amazon S3, append-only (one validated event per object). Near-zero at rest. The raw store is an audit trail (FR-7) and is deliberately not deduplicated: only the aggregate-of-record needs idempotency (NFR-R1), so raw carries no Iceberg table and no MERGE. This matches the least-privilege action matrix in `50_cloud_strategy.md`, which lists the raw store as a separate S3 target from the aggregate-of-record.
 - Serving store: Amazon DynamoDB, on-demand billing, with partition key region and sort key window_start. This models the dashboard read exactly, gives a native idempotent upsert on the natural key, meets the sub-second target (NFR-P3), and is near-free at idle and within the free tier at this volume.
 - Ad-hoc and backfill queries: Athena over the S3 Iceberg tables, pay-per-query, negligible at this data size, and not on the latency-bound path.
 
