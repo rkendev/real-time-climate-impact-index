@@ -67,3 +67,9 @@ variable "force_destroy_buckets" {
   type        = bool
   default     = false
 }
+
+variable "offline_plan" {
+  description = "True for the credential-free offline validate and plan (the provider skips credential and account-id lookups). Set false on a real apply so the provider resolves the account id for account-scoped API calls such as Glue tag reads."
+  type        = bool
+  default     = true
+}

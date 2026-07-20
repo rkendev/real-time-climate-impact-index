@@ -90,7 +90,11 @@ resource "aws_dynamodb_table" "serving" {
 }
 
 # Glue catalog database that holds the Iceberg table: the production catalog the
-# P2-T1 Iceberg adapter targets on AWS.
+# P2-T1 Iceberg adapter targets on AWS. catalog_id is set explicitly from
+# var.account_id because the provider runs with skip_requesting_account_id (so
+# validate and plan stay offline), which otherwise leaves the CatalogId empty on
+# apply and the CreateDatabase call fails.
 resource "aws_glue_catalog_database" "iceberg" {
-  name = var.iceberg_namespace
+  name       = var.iceberg_namespace
+  catalog_id = var.account_id
 }

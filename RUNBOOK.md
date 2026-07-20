@@ -46,8 +46,9 @@ terraform -chdir=infra/persistent init -backend-config=...
 terraform -chdir=infra/ephemeral  init -backend-config=...
 
 # 3. Apply the persistent stack (buckets, DynamoDB, Glue, IAM, budget, ECR repo).
+#    offline_plan=false lets the provider resolve the account id (needed for Glue).
 TF_VAR_project_tag=$(.venv/bin/python -c 'from climate_index.config import get_settings; print(get_settings().project_tag)') \
-  terraform -chdir=infra/persistent apply
+  TF_VAR_offline_plan=false terraform -chdir=infra/persistent apply
 #    Confirm the 12 dollar budget alarm is live in the console.
 
 # 4. Build the arm64 image and push it to ECR (from the workstation, not the box).
@@ -57,7 +58,7 @@ make image-build image-push          # buildx --platform linux/arm64, then push
 # 5. Apply the ephemeral stack. The box pulls the image and runs the stack via
 #    user_data (docker login by instance role, docker compose pull and up).
 #    Pass ecr_repository_url and image_tag into the ephemeral tfvars first.
-TF_VAR_project_tag=$... terraform -chdir=infra/ephemeral apply
+TF_VAR_project_tag=$... TF_VAR_offline_plan=false terraform -chdir=infra/ephemeral apply
 
 # 6. Run the producer for a bounded batch (via SSM Session Manager on the box):
 #    cd /opt/climate-index && docker compose run --rm producer
@@ -77,7 +78,7 @@ confidence.
 ## Tear down immediately (manual, no backstop)
 
 ```
-TF_VAR_project_tag=$... terraform -chdir=infra/ephemeral destroy
+TF_VAR_project_tag=$... TF_VAR_offline_plan=false terraform -chdir=infra/ephemeral destroy
 make teardown-audit                            # AT-11: no billable resource carries the project tag
 ```
 
@@ -88,15 +89,33 @@ Leave the persistent layer standing. Record the actual spend below.
 ```
 export ECR_REPO=$(terraform -chdir=infra/persistent output -raw ecr_repository_url)
 make image-push                                 # only if the image changed
-TF_VAR_project_tag=$... terraform -chdir=infra/ephemeral apply
+TF_VAR_project_tag=$... TF_VAR_offline_plan=false terraform -chdir=infra/ephemeral apply
 ```
 
 Tear down with the ephemeral destroy plus `make teardown-audit` as above.
 
-## Recorded spend
+## Recorded spend (paid run 2026-07-20, us-east-1)
 
-- Paid run date: _to be recorded after the run_
-- Actual spend: _to be recorded (must be under the 50 dollar ceiling)_
-- AT-5 against Glue: _result_
-- NFR-P3 p95: _measured value_
-- AT-11 post-teardown audit: _clean / offenders_
+- Instance: t4g.medium, up for roughly 40 minutes, then destroyed.
+- Actual spend: under 0.05 US dollars (t4g.medium ~40 min about 0.025, public IPv4
+  about 0.004, S3 and DynamoDB and Glue and ECR operations pennies). Cost Explorer
+  showed 0 for the project tag at teardown time (billing data lags several hours).
+  Far under the 50 dollar ceiling.
+- AT-5 against the real Glue catalog: OK (replaying one window left exactly one
+  Iceberg row for EUR).
+- NFR-P3: OK (DynamoDB read p95 130 ms over 50 reads across 48 seeded windows,
+  under the 1000 ms target; measured cross-internet, so faster in-region).
+- Aggregates populated in both stores: DynamoDB and the S3 Iceberg or Glue table.
+- Dashboard reachable at the instance public address on port 8501 from the owner
+  IP, serving the index, verbal label, and confidence for all four regions.
+- AT-11 post-teardown audit: clean (no billable resource carries the project tag).
+- Persistent layer left standing at near-zero rest (state, warehouse, and raw
+  buckets; DynamoDB; Glue database; ECR image; budget alarm).
+
+## Notes learned on the run (folded into the code)
+
+- Real applies pass `TF_VAR_offline_plan=false` so the provider resolves the
+  account id (the offline default keeps validate and plan credential-free).
+- The Glue database sets `catalog_id` explicitly, pyiceberg's Glue catalog needs
+  `AWS_REGION` in the box environment, and the processor role needs
+  `glue:CreateDatabase` (pyiceberg calls it idempotently on first table creation).

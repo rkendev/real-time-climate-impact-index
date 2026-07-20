@@ -28,6 +28,10 @@ chmod +x /usr/local/lib/docker/cli-plugins/docker-compose
 cat > /etc/climate-index.env <<'ENV'
 CII_AGGREGATE_BACKEND=aws
 CII_AWS_REGION=${aws_region}
+# pyiceberg's Glue catalog builds its own boto3 client and reads the region from
+# the standard AWS_REGION variable, not from the app settings, so set it here too.
+AWS_REGION=${aws_region}
+AWS_DEFAULT_REGION=${aws_region}
 CII_ICEBERG_WAREHOUSE_BUCKET=${iceberg_warehouse_bucket}
 CII_ICEBERG_NAMESPACE=${iceberg_namespace}
 CII_ICEBERG_TABLE=${iceberg_table}

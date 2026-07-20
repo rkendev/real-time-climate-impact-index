@@ -30,13 +30,16 @@ terraform {
 
 # The skip flags plus passing the account id as a variable (never
 # aws_caller_identity) let validate and plan run credential-free with no AWS
-# contact. default_tags stamps every taggable resource with the project tag,
-# which the AT-11 teardown audit and cost allocation rely on.
+# contact. They are on for the offline plan (var.offline_plan default true) and
+# off on a real apply, so the provider can resolve the account id for
+# account-scoped calls such as Glue tag reads. default_tags stamps every taggable
+# resource with the project tag, which the AT-11 teardown audit and cost
+# allocation rely on.
 provider "aws" {
   region                      = var.aws_region
-  skip_credentials_validation = true
-  skip_requesting_account_id  = true
-  skip_metadata_api_check     = true
+  skip_credentials_validation = var.offline_plan
+  skip_requesting_account_id  = var.offline_plan
+  skip_metadata_api_check     = var.offline_plan
 
   default_tags {
     tags = {

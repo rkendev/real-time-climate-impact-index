@@ -97,3 +97,9 @@ variable "compose_plugin_version" {
   type        = string
   default     = "v2.40.0"
 }
+
+variable "offline_plan" {
+  description = "True for the credential-free offline validate and plan (the provider skips credential and account-id lookups). Set false on a real apply so the provider resolves the account id."
+  type        = bool
+  default     = true
+}

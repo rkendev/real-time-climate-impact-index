@@ -54,6 +54,11 @@ data "aws_iam_policy_document" "processor" {
     sid = "GlueReadWrite"
     actions = [
       "glue:GetDatabase",
+      # pyiceberg's Glue catalog calls create_namespace_if_not_exists on first
+      # table creation, which issues CreateDatabase and catches AlreadyExists.
+      # The database is pre-created by this stack, so the call is a harmless
+      # idempotent no-op, but the action must be allowed or it fails closed.
+      "glue:CreateDatabase",
       "glue:GetTable",
       "glue:GetTables",
       "glue:CreateTable",
