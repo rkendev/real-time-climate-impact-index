@@ -24,6 +24,15 @@ files = ["src"]
 module = ["confluent_kafka.*"]
 ignore_missing_imports = true
 
+# The Phase 2 cloud SDKs ship partial or no type information and are imported
+# lazily under adapters/ only. Declare them as stubless third-party modules so
+# strict mypy stays honest without scattered inline ignores, matching the
+# confluent_kafka treatment above. The pre-commit mypy hook does not install
+# these, so the override also keeps the hook green.
+[[tool.mypy.overrides]]
+module = ["boto3.*", "botocore.*", "pyarrow.*", "pyiceberg.*"]
+ignore_missing_imports = true
+
 [tool.pydantic-mypy]
 init_forbid_extra = true
 init_typed = true

@@ -6,3 +6,8 @@ ruff==0.15.22
 mypy==1.15.0
 pytest==8.3.4
 pre-commit==4.0.1
+# Phase 2 AWS adapter tests run offline against a local moto server (no spend);
+# moto[server] provides moto_server, and SQLAlchemy backs the pyiceberg SQL
+# (SQLite) catalog the tests use in place of Glue.
+moto[server]==5.2.2
+SQLAlchemy==2.0.51

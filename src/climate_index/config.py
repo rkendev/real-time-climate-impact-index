@@ -110,6 +110,41 @@ class Settings(BaseSettings):
     raw_store_path: Path = Path("data/raw")
     aggregate_store_path: Path = Path("data/aggregates.duckdb")
 
+    # Which aggregate-store backend the composition root builds (see
+    # climate_index.store_factory). "duckdb" is the local default; "aws" builds
+    # the S3 Iceberg aggregate-of-record fanned out to the DynamoDB serving store
+    # (ADR-0003). A backend name, not an endpoint or secret.
+    aggregate_backend: str = "duckdb"
+
+    # Phase 2 AWS connection details (INV-1): no endpoint, bucket, table, or
+    # secret literal here. The region and endpoint override default to None and
+    # are populated from the environment when an AWS adapter runs. The endpoint
+    # override is None in production (real AWS) and set only by the test fixture
+    # (the moto server URL).
+    aws_region: str | None = None
+    aws_endpoint_url: str | None = None
+
+    # S3 Iceberg aggregate-of-record (ADR-0003). The warehouse bucket is a
+    # connection detail (None until provisioned); the namespace and table name
+    # are plain structural identifiers, neither endpoints nor secrets, so they
+    # carry authoritative defaults here. The catalog properties select and
+    # configure the catalog: the pyiceberg SQL (SQLite) catalog in tests versus
+    # the Glue catalog on AWS. Supplied as JSON, like the other dict fields.
+    iceberg_warehouse_bucket: str | None = None
+    iceberg_namespace: str = "climate_index"
+    iceberg_table: str = "climate_index"
+    iceberg_catalog_properties: dict[str, str] = Field(default_factory=dict)
+
+    # DynamoDB serving store (ADR-0003). The table name is a connection detail,
+    # None until provisioned; the key model (pk region, sk window_start) is fixed
+    # in the adapter, not configured.
+    dynamo_table: str | None = None
+
+    # S3 raw store (FR-7). The bucket is a connection detail (None until
+    # provisioned); the prefix under it is a plain path segment, so it defaults.
+    raw_s3_bucket: str | None = None
+    raw_s3_prefix: str = "raw"
+
     @property
     def region_list(self) -> tuple[str, ...]:
         """The configured regions as an ordered tuple of non-empty codes."""
