@@ -23,9 +23,11 @@ from __future__ import annotations
 
 import ast
 import importlib.util
+import json
 import sys
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime, timedelta, timezone
 from pathlib import Path
+from typing import cast
 
 import pytest
 
@@ -200,6 +202,56 @@ def test_view_carries_the_stored_grade_of_every_window() -> None:
     assert view.window_starts[-1] == start + timedelta(minutes=60)
 
 
+def test_axis_labels_are_derived_from_utc_not_from_the_stored_offset() -> None:
+    """A window stamped in another zone still reads as its UTC clock time."""
+    module = _load_dashboard_module()
+    settings = Settings(_env_file=None)
+    central_european_summer = timezone(timedelta(hours=2))
+    # The same instant as 12:00 UTC, written in the zone the live page renders in.
+    local_noon = datetime(2026, 7, 21, 14, 0, tzinfo=central_european_summer)
+
+    labels = module.utc_axis_labels([local_noon], settings)  # type: ignore[attr-defined]
+
+    assert labels == ("12:00",)
+    # And a stored naive value is read as UTC, the way the stores write it.
+    naive = module.utc_axis_labels([datetime(2026, 7, 21, 12, 0)], settings)  # type: ignore[attr-defined]
+    assert naive == ("12:00",)
+
+
+def test_axis_stays_chronological_across_midnight() -> None:
+    """The axis order is the series order, never the labels sorted as text."""
+    module = _load_dashboard_module()
+    settings = Settings(_env_file=None)
+    start = datetime(2026, 7, 20, 22, 30, tzinfo=UTC)
+    starts = [start + timedelta(minutes=30 * position) for position in range(6)]
+    rows = [
+        {
+            "window_start": moment,
+            "window_end": moment + timedelta(minutes=30),
+            "impact_index": 10.0 + position,
+            "confidence": Confidence.MEASURED.value,
+        }
+        for position, moment in enumerate(starts)
+    ]
+    view = module.build_region_view(rows, "EUR")  # type: ignore[attr-defined]
+
+    expected = ("22:30", "23:00", "23:30", "00:00", "00:30", "01:00")
+    labels = module.utc_axis_labels(view.window_starts, settings)  # type: ignore[attr-defined]
+    assert labels == expected
+    # Text order would have put the post-midnight windows first, so the chart must
+    # not be left to sort the labels itself.
+    assert sorted(labels) != list(labels)
+
+    # Both charts pin the axis to the chronological label sequence.
+    for chart in (
+        module.index_chart(view, settings),  # type: ignore[attr-defined]
+        module.confidence_chart(view, settings),  # type: ignore[attr-defined]
+    ):
+        x_encoding = chart.to_dict()["encoding"]["x"]
+        assert x_encoding["field"] == module.WINDOW_COLUMN  # type: ignore[attr-defined]
+        assert tuple(x_encoding["sort"]) == expected
+
+
 def test_legends_are_rendered_from_config_not_from_page_literals() -> None:
     module = _load_dashboard_module()
     settings = Settings(_env_file=None)
@@ -310,27 +362,42 @@ def test_page_explains_the_index_the_feed_the_tiers_and_the_bands(
     assert settings.source_repository_url in page
 
 
-def test_chart_carries_real_times_units_and_a_per_window_confidence_cue(
+def _chart_rows(spec: dict[str, object]) -> list[dict[str, object]]:
+    """The rows a built chart carries, inline or as its named dataset."""
+    data = cast("dict[str, object]", spec["data"])
+    if "values" in data:
+        return cast("list[dict[str, object]]", data["values"])
+    datasets = cast("dict[str, list[dict[str, object]]]", spec["datasets"])
+    return datasets[cast("str", data["name"])]
+
+
+def test_chart_carries_utc_times_units_and_a_per_window_confidence_cue(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     db_path = _seed_store(tmp_path)
     settings = Settings(_env_file=None)
     module = _load_dashboard_module()
+    window_column = module.WINDOW_COLUMN  # type: ignore[attr-defined]
+    confidence_column = module.CONFIDENCE_COLUMN  # type: ignore[attr-defined]
 
     recorder = _render_and_record(module, db_path, monkeypatch)
-    charts = {name: (args, kwargs) for name, args, kwargs in recorder.calls if "chart" in name}
+    charts = [args[0].to_dict() for name, args, _ in recorder.calls if name == "altair_chart"]
+    assert len(charts) == 2
+    series, strip = charts
 
-    line_args, line_kwargs = charts["line_chart"]
-    assert line_kwargs["x_label"] == module.WINDOW_COLUMN  # type: ignore[attr-defined]
-    assert line_kwargs["y_label"] == settings.index_axis_label  # the index and its range
-    series = line_args[0]
-    assert series[module.WINDOW_COLUMN][0] == datetime(2026, 7, 19, 10, 0, tzinfo=UTC)  # type: ignore[attr-defined]
-    assert series[settings.index_axis_label] == [10.0, 40.0, 70.0]
+    # The seeded windows start at 10:00, 11:00 and 12:00 UTC, and the axis says so
+    # in UTC rather than in whatever zone the viewer's browser sits in.
+    assert series["encoding"]["x"]["title"] == window_column
+    assert series["encoding"]["y"]["title"] == settings.index_axis_label  # the index and its range
+    assert tuple(series["encoding"]["x"]["sort"]) == ("10:00", "11:00", "12:00")
+    series_rows = _chart_rows(series)
+    assert [row[window_column] for row in series_rows] == ["10:00", "11:00", "12:00"]
+    assert [row[settings.index_axis_label] for row in series_rows] == [10.0, 40.0, 70.0]
 
-    strip_args, strip_kwargs = charts["bar_chart"]
-    assert strip_kwargs["color"] == module.CONFIDENCE_COLUMN  # type: ignore[attr-defined]
-    # The cue is the grade the pipeline stored for each window, unmodified.
-    assert strip_args[0][module.CONFIDENCE_COLUMN] == [  # type: ignore[attr-defined]
+    # The strip shares the axis, and its cue is the grade the pipeline stored for
+    # each window, unmodified.
+    assert tuple(strip["encoding"]["x"]["sort"]) == ("10:00", "11:00", "12:00")
+    assert [row[confidence_column] for row in _chart_rows(strip)] == [
         Confidence.MEASURED.value,
         Confidence.INFERRED.value,
         Confidence.MEASURED.value,
@@ -367,3 +434,12 @@ def test_the_real_page_renders_end_to_end_from_a_seeded_store(
         "What the tiers and labels mean",
         "About / how it works",
     ]
+
+    # What Streamlit actually put on the wire: both axes are the UTC clock labels
+    # of the seeded windows, in chronological order, and the newest tick states
+    # the same instant as the freshness caption above the charts.
+    specs = [json.loads(element.proto.spec) for element in app.get("vega_lite_chart")]
+    assert len(specs) == 2
+    for spec in specs:
+        assert spec["encoding"]["x"]["sort"] == ["10:00", "11:00", "12:00"]
+    assert any("2026-07-19 12:00 UTC" in caption.value for caption in app.caption)

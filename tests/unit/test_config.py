@@ -36,6 +36,12 @@ def test_display_constants_are_the_single_authority(  # UC-5, NFR-DQ2
     # The tier glosses cover exactly the three grades an aggregate row can carry.
     assert set(settings.confidence_tier_glosses) == {"MEASURED", "INFERRED", "AMBIGUOUS"}
     assert all(gloss for gloss in settings.confidence_tier_glosses.values())
+    # The chart's time axis is written on the server on a 24 hour clock, so a
+    # window at 14:00 UTC can never read as 2 PM in someone's local afternoon.
+    assert "%H" in settings.window_axis_time_format
+    assert "%M" in settings.window_axis_time_format
+    assert "%I" not in settings.window_axis_time_format
+    assert "%p" not in settings.window_axis_time_format
     assert settings.pipeline_summary
     assert settings.source_repository_url.startswith("https://")
     assert settings.demo_refresh_interval

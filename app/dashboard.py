@@ -14,6 +14,13 @@ Every one of those definitions is read from
 window's grade is the value the pipeline stored on that row. Nothing here sets or
 adjusts a grade.
 
+Window times are written as UTC clock labels on the server (``as_utc`` is the one
+place the page handles zones, and ``window_axis_time_format`` holds the pattern),
+and each chart's axis is pinned to that ordered label sequence. A datetime handed
+to the browser would be redrawn in the viewer's own zone, so an axis titled UTC
+would quietly show local time; formatting here keeps the axis and the freshness
+line quoting the same clock.
+
 It reads the aggregate store only through a read-only store built by
 :func:`~climate_index.store_factory.build_readonly_aggregate_store`, which selects
 the DuckDB reader locally or the DynamoDB serving reader on AWS by config; both
@@ -34,9 +41,16 @@ from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any
 
+# Altair is Streamlit's own charting library, installed by the streamlit pin, so
+# nothing new is added to requirements.txt. The page reaches for it directly
+# because the built-in chart calls cannot express what this axis needs: they hand
+# window datetimes to the browser, which localizes a temporal axis whatever the
+# axis is titled, and they offer no way to pin a category axis to an explicit
+# order or to map the confidence tiers to chosen colours while keeping a legend.
+import altair as alt
 import streamlit as st
 
 from climate_index.config import Settings, get_settings
@@ -120,11 +134,24 @@ def tier_gloss(confidence: str | None, settings: Settings) -> str:
     return settings.confidence_tier_glosses.get(confidence, "")
 
 
+def as_utc(moment: datetime) -> datetime:
+    """Move a stored instant into UTC, the one place this page handles zones.
+
+    Every time the page shows comes through here, so the freshness line and the
+    chart axis cannot disagree about which clock they are quoting. The reader
+    already returns aware UTC datetimes; a naive value is read as UTC rather than
+    as the server's local time, which is how the stores write them.
+    """
+    if moment.tzinfo is None:
+        return moment.replace(tzinfo=UTC)
+    return moment.astimezone(UTC)
+
+
 def freshness_line(view: RegionView, settings: Settings) -> str:
     """State when the served snapshot last moved and how often it refreshes."""
     if not view.window_starts:
         return ""
-    newest = view.window_starts[-1]
+    newest = as_utc(view.window_starts[-1])
     return (
         f"Newest window starts {newest.strftime('%Y-%m-%d %H:%M')} UTC. "
         f"Each window covers {settings.window_minutes} minutes, "
@@ -132,25 +159,87 @@ def freshness_line(view: RegionView, settings: Settings) -> str:
     )
 
 
-def series_frame(view: RegionView, settings: Settings) -> dict[str, list[Any]]:
-    """Columns for the index chart: real window times against the stored index."""
-    return {
-        WINDOW_COLUMN: list(view.window_starts),
-        settings.index_axis_label: list(view.impact_series),
-    }
+def utc_axis_labels(window_starts: Sequence[datetime], settings: Settings) -> tuple[str, ...]:
+    """Write each window start as a UTC clock label, in the series' own order.
+
+    The label is formatted here, on the server, from the UTC instant
+    :func:`as_utc` returns, so the browser is handed a category rather than a
+    datetime it would localize: the axis then reads the same clock the freshness
+    line quotes. The order returned is the order given, which is the order the
+    store read the rows in (oldest to newest, by window start). Callers pin the
+    axis to this sequence and never re-derive the order from the labels: a series
+    that crosses midnight runs 23:30 then 00:00, which sorts the wrong way round
+    as text.
+    """
+    return tuple(
+        as_utc(start).strftime(settings.window_axis_time_format) for start in window_starts
+    )
 
 
-def confidence_frame(view: RegionView) -> dict[str, list[Any]]:
-    """Columns for the confidence strip: one bar per window, coloured by grade.
+def series_rows(view: RegionView, settings: Settings) -> list[dict[str, Any]]:
+    """Rows for the index chart: the UTC window label against the stored index."""
+    labels = utc_axis_labels(view.window_starts, settings)
+    return [
+        {WINDOW_COLUMN: label, settings.index_axis_label: value}
+        for label, value in zip(labels, view.impact_series, strict=True)
+    ]
 
-    The colour column carries the grade the pipeline stored for that window, so
+
+def confidence_rows(view: RegionView, settings: Settings) -> list[dict[str, Any]]:
+    """Rows for the confidence strip: one bar per window, coloured by grade.
+
+    The colour field carries the grade the pipeline stored for that window, so
     the strip shows what was computed rather than anything decided here.
     """
-    return {
-        WINDOW_COLUMN: list(view.window_starts),
-        WINDOW_COUNT_COLUMN: [1] * len(view.window_starts),
-        CONFIDENCE_COLUMN: list(view.confidence_series),
-    }
+    labels = utc_axis_labels(view.window_starts, settings)
+    return [
+        {WINDOW_COLUMN: label, WINDOW_COUNT_COLUMN: 1, CONFIDENCE_COLUMN: grade}
+        for label, grade in zip(labels, view.confidence_series, strict=True)
+    ]
+
+
+def index_chart(view: RegionView, settings: Settings) -> alt.Chart:
+    """The index series over the UTC window labels, oldest to newest.
+
+    The axis is a category axis whose domain is the label sequence itself, so the
+    points stay in the order the store read them however the labels would sort as
+    text, and no browser localizes anything.
+    """
+    labels = utc_axis_labels(view.window_starts, settings)
+    return (
+        alt.Chart(data={"values": series_rows(view, settings)})
+        .mark_line(point=True)
+        .encode(
+            x=alt.X(field=WINDOW_COLUMN, type="ordinal", title=WINDOW_COLUMN, sort=list(labels)),
+            y=alt.Y(
+                field=settings.index_axis_label,
+                type="quantitative",
+                title=settings.index_axis_label,
+            ),
+            tooltip=[
+                alt.Tooltip(field=WINDOW_COLUMN, type="ordinal"),
+                alt.Tooltip(field=settings.index_axis_label, type="quantitative"),
+            ],
+        )
+    )
+
+
+def confidence_chart(view: RegionView, settings: Settings) -> alt.Chart:
+    """One bar per window on the same UTC axis, coloured by the stored grade."""
+    labels = utc_axis_labels(view.window_starts, settings)
+    return (
+        alt.Chart(data={"values": confidence_rows(view, settings)})
+        .mark_bar()
+        .encode(
+            x=alt.X(field=WINDOW_COLUMN, type="ordinal", title=WINDOW_COLUMN, sort=list(labels)),
+            y=alt.Y(field=WINDOW_COUNT_COLUMN, type="quantitative", title=CONFIDENCE_COLUMN),
+            color=alt.Color(field=CONFIDENCE_COLUMN, type="nominal", title=CONFIDENCE_COLUMN),
+            tooltip=[
+                alt.Tooltip(field=WINDOW_COLUMN, type="ordinal"),
+                alt.Tooltip(field=CONFIDENCE_COLUMN, type="nominal"),
+            ],
+        )
+    )
 
 
 def render(store: ReadOnlyAggregateStore, settings: Settings) -> None:
@@ -176,23 +265,9 @@ def render(store: ReadOnlyAggregateStore, settings: Settings) -> None:
     confidence.caption(tier_gloss(view.confidence, settings))
 
     st.subheader("Impact index over recent windows")
-    st.line_chart(
-        series_frame(view, settings),
-        x=WINDOW_COLUMN,
-        y=settings.index_axis_label,
-        x_label=WINDOW_COLUMN,
-        y_label=settings.index_axis_label,
-    )
+    st.altair_chart(index_chart(view, settings), width="stretch")
     st.caption(f"One point per {settings.window_minutes} minute window, oldest to newest.")
-    st.bar_chart(
-        confidence_frame(view),
-        x=WINDOW_COLUMN,
-        y=WINDOW_COUNT_COLUMN,
-        color=CONFIDENCE_COLUMN,
-        x_label=WINDOW_COLUMN,
-        y_label=CONFIDENCE_COLUMN,
-        height=140,
-    )
+    st.altair_chart(confidence_chart(view, settings), width="stretch", height=140)
     st.caption(
         "The strip carries the confidence grade the pipeline computed for each window "
         "from that window's input."
