@@ -30,7 +30,7 @@ from pathlib import Path
 import pytest
 
 from climate_index.adapters.duckdb import DuckDBAggregateStore, DuckDBReadOnlyAggregateStore
-from climate_index.config import Settings
+from climate_index.config import Settings, get_settings
 from climate_index.core.models import ClimateIndexRecord, Confidence
 from climate_index.labels import verbal_label
 
@@ -334,4 +334,36 @@ def test_chart_carries_real_times_units_and_a_per_window_confidence_cue(
         Confidence.MEASURED.value,
         Confidence.INFERRED.value,
         Confidence.MEASURED.value,
+    ]
+
+
+def test_the_real_page_renders_end_to_end_from_a_seeded_store(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Run the actual script through Streamlit, so a misused chart call cannot pass.
+
+    The recording stand-in above checks what the page says; this checks that
+    Streamlit accepts it. It drives the committed entry point (``main``) against a
+    seeded store on the local backend, so the widgets, the two charts, and the
+    expanders are all built for real. No server and no browser: Streamlit's own
+    headless harness runs the script in-process, and the page still only reads.
+    """
+    from streamlit.testing.v1 import AppTest
+
+    db_path = _seed_store(tmp_path)
+    monkeypatch.setenv("CII_AGGREGATE_BACKEND", "duckdb")
+    monkeypatch.setenv("CII_AGGREGATE_STORE_PATH", str(db_path))
+    get_settings.cache_clear()
+
+    try:
+        app = AppTest.from_file(str(DASHBOARD), default_timeout=30).run()
+    finally:
+        get_settings.cache_clear()
+
+    assert not app.exception, app.exception
+    assert app.title[0].value == "Real-Time Climate Impact Index"
+    assert len(app.metric) == 3
+    assert [expander.label for expander in app.expander] == [
+        "What the tiers and labels mean",
+        "About / how it works",
     ]
