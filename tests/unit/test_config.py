@@ -7,6 +7,8 @@ default literal (it is populated from the environment only).
 
 from __future__ import annotations
 
+import re
+
 import pytest
 
 from climate_index.config import Settings
@@ -36,6 +38,13 @@ def test_display_constants_are_the_single_authority(  # UC-5, NFR-DQ2
     # The tier glosses cover exactly the three grades an aggregate row can carry.
     assert set(settings.confidence_tier_glosses) == {"MEASURED", "INFERRED", "AMBIGUOUS"}
     assert all(gloss for gloss in settings.confidence_tier_glosses.values())
+    # Every tier the page can show has a colour, keyed and ordered like the
+    # glosses, so the strip cannot colour a grade the legend does not name.
+    assert list(settings.confidence_tier_colors) == list(settings.confidence_tier_glosses)
+    assert all(
+        re.fullmatch(r"#[0-9A-Fa-f]{6}", color)
+        for color in settings.confidence_tier_colors.values()
+    )
     # The chart's time axis is written on the server on a 24 hour clock, so a
     # window at 14:00 UTC can never read as 2 PM in someone's local afternoon.
     assert "%H" in settings.window_axis_time_format

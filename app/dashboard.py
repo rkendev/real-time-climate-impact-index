@@ -10,8 +10,9 @@ means, and where the label bands fall.
 Every one of those definitions is read from
 :class:`~climate_index.config.Settings`, which holds them as the single authority
 (INV-1). The page states nothing of its own: the band cutoffs come from
-``label_thresholds``, the tier glosses from ``confidence_tier_glosses``, and each
-window's grade is the value the pipeline stored on that row. Nothing here sets or
+``label_thresholds``, the tier glosses from ``confidence_tier_glosses``, the strip
+colours from ``confidence_tier_colors``, and each window's grade is the value the
+pipeline stored on that row. Nothing here sets or
 adjusts a grade.
 
 Window times are written as UTC clock labels on the server (``as_utc`` is the one
@@ -225,15 +226,30 @@ def index_chart(view: RegionView, settings: Settings) -> alt.Chart:
 
 
 def confidence_chart(view: RegionView, settings: Settings) -> alt.Chart:
-    """One bar per window on the same UTC axis, coloured by the stored grade."""
+    """One bar per window on the same UTC axis, coloured by the stored grade.
+
+    The colours are read from ``confidence_tier_colors``, which holds them as the
+    single authority beside the glosses (INV-1), and the scale is pinned to the
+    configured tiers rather than assigned in the order grades happen to appear.
+    A tier therefore always draws in its own colour whatever the window set
+    contains, and the legend still names every tier by grade.
+    """
     labels = utc_axis_labels(view.window_starts, settings)
+    tier_colors = settings.confidence_tier_colors
     return (
         alt.Chart(data={"values": confidence_rows(view, settings)})
         .mark_bar()
         .encode(
             x=alt.X(field=WINDOW_COLUMN, type="ordinal", title=WINDOW_COLUMN, sort=list(labels)),
             y=alt.Y(field=WINDOW_COUNT_COLUMN, type="quantitative", title=CONFIDENCE_COLUMN),
-            color=alt.Color(field=CONFIDENCE_COLUMN, type="nominal", title=CONFIDENCE_COLUMN),
+            color=alt.Color(
+                field=CONFIDENCE_COLUMN,
+                type="nominal",
+                title=CONFIDENCE_COLUMN,
+                scale=alt.Scale(domain=list(tier_colors), range=list(tier_colors.values())),
+                # Below the strip, where the built-in chart used to put it.
+                legend=alt.Legend(orient="bottom"),
+            ),
             tooltip=[
                 alt.Tooltip(field=WINDOW_COLUMN, type="ordinal"),
                 alt.Tooltip(field=CONFIDENCE_COLUMN, type="nominal"),

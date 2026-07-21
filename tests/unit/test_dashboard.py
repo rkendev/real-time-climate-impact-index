@@ -403,6 +403,15 @@ def test_chart_carries_utc_times_units_and_a_per_window_confidence_cue(
         Confidence.MEASURED.value,
     ]
 
+    # The bar colours are the configured tier mapping, pinned tier by tier rather
+    # than assigned in the order the grades happen to appear, and the legend still
+    # names the grades.
+    color = strip["encoding"]["color"]
+    assert color["field"] == confidence_column
+    assert color["scale"]["domain"] == list(settings.confidence_tier_colors)
+    assert color["scale"]["range"] == list(settings.confidence_tier_colors.values())
+    assert color["legend"] is not None  # a null legend is how a legend is switched off
+
 
 def test_the_real_page_renders_end_to_end_from_a_seeded_store(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
@@ -443,3 +452,9 @@ def test_the_real_page_renders_end_to_end_from_a_seeded_store(
     for spec in specs:
         assert spec["encoding"]["x"]["sort"] == ["10:00", "11:00", "12:00"]
     assert any("2026-07-19 12:00 UTC" in caption.value for caption in app.caption)
+
+    # And the strip Streamlit rendered carries the configured tier colours.
+    settings = Settings(_env_file=None)
+    strip_colors = specs[1]["encoding"]["color"]["scale"]
+    assert strip_colors["domain"] == list(settings.confidence_tier_colors)
+    assert strip_colors["range"] == list(settings.confidence_tier_colors.values())

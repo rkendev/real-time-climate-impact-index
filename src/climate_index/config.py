@@ -137,6 +137,20 @@ class Settings(BaseSettings):
         }
     )
 
+    # NFR-DQ2 tier colours for the dashboard's confidence strip, keyed like the
+    # glosses above and held here as their single authority (INV-1). They read the
+    # way a viewer expects without consulting the legend: the strongest tier calm
+    # (teal), the imputed tier amber, the sparse tier warm red. Teal rather than
+    # green so the strongest and weakest stay apart under red/green colour vision
+    # deficiency. Presentation only: a colour never feeds or alters a grade.
+    confidence_tier_colors: dict[str, str] = Field(
+        default_factory=lambda: {
+            "MEASURED": "#2C7A7B",
+            "INFERRED": "#B7791F",
+            "AMBIGUOUS": "#C0392B",
+        }
+    )
+
     # UC-1 to UC-5 in one line, for the dashboard's about panel.
     pipeline_summary: str = (
         "Simulated sources publish to Kafka, a deterministic gate validates or quarantines each "
