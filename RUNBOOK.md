@@ -138,8 +138,19 @@ That file is git-ignored; only the `*.example` and the templates are tracked
 
 **Cadence.** One value, `CII_DEMO_REFRESH_INTERVAL` in `deploy/vps/demo.env`
 (default `30min`). Change it and re-run `make vps-demo-up`; the timer is re-rendered
-and re-armed. `CII_DEMO_WINDOWS` and `CII_DEMO_EVENTS_PER_WINDOW` size each
+and re-armed. The page states this same cadence, because the dashboard unit reads
+that environment file. `CII_DEMO_WINDOWS` and `CII_DEMO_EVENTS_PER_WINDOW` size each
 snapshot (default twelve windows, so six hours of series at the 30 minute window).
+
+**Uneven coverage on purpose.** `CII_DEMO_DEGRADED_WINDOW_FRACTION` (default `0.25`)
+is the share of each backfill's windows given thinner input: those carry weather
+readings only, and the oldest of them carries a single reading. The newest window is
+never thinned. The committed confidence computation grades those windows down by
+itself, so a snapshot reads roughly nine MEASURED, two INFERRED, and one AMBIGUOUS
+window per region and the page shows the provenance signal working rather than one
+flat tier. The tiers displayed are computed from that input by the pipeline; neither
+the feeder nor the dashboard sets a grade, and every event published stays
+well-formed, so nothing is quarantined to achieve it.
 
 **What a refresh does.** Wipes the staging directory, brings single-node Kafka up on
 its own compose project, publishes a bounded backfill across the last N event-time
