@@ -1,0 +1,16 @@
+# Caddy site block for the live demo (rendered, never installed as-is).
+#
+# deploy/vps/install_caddy_site.sh substitutes __DEMO_HOST__ and __PORT__ and
+# appends the result to the host's existing Caddyfile between the markers below.
+# The markers are what make the block removable again without rewriting the file,
+# so every other site on the box is left byte for byte untouched.
+#
+# Caddy obtains and renews the certificate itself through the sslip.io name, so
+# there is no certbot step and no key material anywhere in this repository. The
+# dashboard binds loopback only; this block is the single public door to it.
+# >>> climate-index demo (managed) >>>
+__DEMO_HOST__ {
+	reverse_proxy 127.0.0.1:__PORT__
+	encode gzip
+}
+# <<< climate-index demo (managed) <<<
