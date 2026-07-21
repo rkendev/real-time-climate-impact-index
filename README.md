@@ -2,12 +2,10 @@
 
 A streaming data pipeline that turns a live feed of weather and satellite readings into a per-region Climate Impact Index, with a confidence label attached to every number, and runs the exact same processing code on a laptop or on AWS by changing one config flag.
 
-<!-- LIVE DEMO SLOT: paste the VPS demo URL here once G1 is exposed, in the form:
-Live demo: climate-index.<vps-ip>.sslip.io
--->
+Live demo: https://climate-index.85-215-55-99.sslip.io
 
 Github repo: github.com/rkendev/real-time-climate-impact-index
-
+a
 ## What it is
 
 Most streaming demos show a number moving on a chart and ask you to trust it. This project takes the opposite stance: every index value is paired with a confidence label that is computed from how much clean data actually backed that window, and readings that fail validation are quarantined rather than silently averaged in. If the evidence for a region is thin, the dashboard says so instead of pretending the number is solid.
@@ -22,7 +20,7 @@ The project is spec-driven. A single specification document is the source of tru
 
 The build ran in two gated phases. Phase 1 stood the whole pipeline up locally on a single machine with DuckDB, provable end to end with no cloud account involved. Phase 2 added the AWS adapters behind the existing storage interfaces, wrote the infrastructure as two-layer Terraform, and then crossed a deliberate spend boundary exactly once to prove the cloud path on real services under a hard cost ceiling.
 
-Correctness is checked offline before any money is spent. The AWS store adapters are tested against moto so the S3, Iceberg, DynamoDB, and Glue code paths are exercised with no live account and no charge. The suite runs 169 tests green with 2 skipped, under strict mypy on the whole source tree, with lint and a set of build-hygiene gates that check things like a single consistent set of dependency pins and the absence of secrets in tracked files. Terraform is formatted, validated, and planned entirely offline with no credentials.
+Correctness is checked offline before any money is spent. The AWS store adapters are tested against moto so the S3, Iceberg, DynamoDB, and Glue code paths are exercised with no live account and no charge. The suite runs 203 tests green with 2 skipped, under strict mypy on the whole source tree, with lint and a set of build-hygiene gates that check things like a single consistent set of dependency pins and the absence of secrets in tracked files. Terraform is formatted, validated, and planned entirely offline with no credentials.
 
 ## What the cloud gate caught
 
@@ -57,11 +55,20 @@ The quality gates that run in the build are available directly:
 ```bash
 make lint
 make type-check       # strict mypy over the source tree
-make test             # 169 passed, 2 skipped
+make test             # 203 passed, 2 skipped
 ```
 
-<!-- SCREENSHOT SLOT: add a dashboard screenshot here showing the four regions
-with their index values and confidence labels. Suggested path: docs/img/dashboard.png -->
+## Live demo
+
+A hosted instance of the local pipeline runs continuously at [climate-index.85-215-55-99.sslip.io](https://climate-index.85-215-55-99.sslip.io). It serves the read-only dashboard and refreshes its data every thirty minutes, so the numbers advance on their own. The AWS path is run on demand rather than left standing, which keeps it at near-zero cost.
+
+![Dashboard overview](docs/img/dashboard-overview.png)
+
+*The dashboard: a region's current index, its label, and its confidence grade, above the index plotted over recent thirty-minute windows on a UTC axis.*
+
+![Confidence strip](docs/img/confidence-strip.png)
+
+*The confidence strip: every thirty-minute window is colored by the grade the pipeline computed from that window's own data (teal measured, amber inferred, red ambiguous), so a thin window is flagged rather than hidden.*
 
 ## Run it on AWS
 
