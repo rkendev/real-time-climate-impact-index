@@ -1,0 +1,36 @@
+# Refresh-only overrides for the live demo (used with the committed compose file).
+#
+# Additive by design: docker-compose.yml is never edited. The refresh runs
+#   docker compose -p <project> -f docker-compose.yml -f deploy/vps/compose.refresh.yml ...
+# under its own project name, so bringing the refresh down can never touch another
+# stack's containers or volumes on a shared box.
+#
+# Three changes, and nothing else:
+#   1. /data becomes a bind mount on the staging directory rather than the named
+#      volume, so the snapshot the pipeline builds lands on the host where the
+#      publish step can rename it over the served path. Compose merges service
+#      volumes by target path, so this replaces the cii-data mount, it does not
+#      add a second one.
+#   2. deploy/vps is mounted read-only into the image so the backfill feeder runs
+#      inside the committed image with no rebuild and no new image role.
+#   3. the broker is capped to a small heap. This box is shared and the broker is
+#      up for a minute or two per refresh; it needs no room to grow.
+#
+# No port is published: the broker is reachable only on the project network, for
+# the length of the refresh.
+
+services:
+  kafka:
+    environment:
+      KAFKA_HEAP_OPTS: "-Xmx512m -Xms256m"
+
+  producer:
+    volumes:
+      - ${CII_DEMO_STAGING_DIR:?set by deploy/vps/refresh.sh}:/data
+      - ./deploy/vps:/app/deploy/vps:ro
+    restart: "no"
+
+  consumer:
+    volumes:
+      - ${CII_DEMO_STAGING_DIR:?set by deploy/vps/refresh.sh}:/data
+    restart: "no"

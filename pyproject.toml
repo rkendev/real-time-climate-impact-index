@@ -5,7 +5,7 @@
 [tool.ruff]
 target-version = "py312"
 line-length = 100
-src = ["src", "tests", "scripts"]
+src = ["src", "tests", "scripts", "deploy/vps"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "SIM"]
@@ -42,6 +42,8 @@ init_typed = true
 warn_required_dynamic_aliases = true
 
 [tool.pytest.ini_options]
-pythonpath = ["src", "scripts"]
+# deploy/vps carries the live demo's feeder and publisher, which are operator
+# tooling like scripts/: importable by tests, deliberately not part of the package.
+pythonpath = ["src", "scripts", "deploy/vps"]
 testpaths = ["tests"]
 addopts = "-ra"

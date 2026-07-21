@@ -1,0 +1,33 @@
+# The bounded refresh, run by the timer (UC-6, FR-6, FR-7).
+#
+# Tracked template carrying placeholders only (INV-1). deploy/vps/install.sh
+# renders __REPO_ROOT__ and __ENV_FILE__ and writes the result to
+# /etc/systemd/system/climate-index-refresh.service. Always edit this file, never
+# the installed copy.
+#
+# Type=oneshot because a refresh is a bounded job, not a service: it starts Kafka,
+# the feeder, and the consumer, and its EXIT trap brings all three down again. That
+# is the whole footprint discipline of this demo, expressed as a unit type.
+#
+# Wants (not Requires) docker.service: if the daemon is down the refresh fails and
+# the previously published snapshot keeps serving, which is the correct failure
+# mode. It never forces another project's dependency to start.
+#
+# No [Install] section: this unit is triggered by climate-index-refresh.timer.
+
+[Unit]
+Description=Climate Impact Index demo refresh (bounded local pipeline, then teardown)
+After=network-online.target docker.service
+Wants=network-online.target docker.service
+
+[Service]
+Type=oneshot
+User=root
+WorkingDirectory=__REPO_ROOT__
+EnvironmentFile=__ENV_FILE__
+Environment=CII_DEMO_ENV_FILE=__ENV_FILE__
+ExecStart=__REPO_ROOT__/deploy/vps/refresh.sh
+TimeoutStartSec=900
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=climate-index-refresh

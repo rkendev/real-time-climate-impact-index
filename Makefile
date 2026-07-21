@@ -46,7 +46,8 @@ lint:
 	$(BIN)/ruff format --check .
 
 type-check:
-	$(BIN)/mypy src scripts/teardown_audit.py scripts/verify_at5_glue.py scripts/verify_nfr_p3.py
+	$(BIN)/mypy src scripts/teardown_audit.py scripts/verify_at5_glue.py scripts/verify_nfr_p3.py \
+		deploy/vps/feed_history.py deploy/vps/publish_snapshot.py
 
 test:
 	$(BIN)/pytest

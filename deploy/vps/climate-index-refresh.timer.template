@@ -1,0 +1,27 @@
+# The refresh cadence (a single config value).
+#
+# Tracked template carrying placeholders only (INV-1). deploy/vps/install.sh
+# renders __REFRESH_INTERVAL__ from CII_DEMO_REFRESH_INTERVAL in the git-ignored
+# demo environment and writes the result to
+# /etc/systemd/system/climate-index-refresh.timer. Changing the cadence is
+# changing that one value and re-running install.sh.
+#
+# OnUnitActiveSec measures from the end of the previous activation, so the gap
+# between refreshes is the configured interval regardless of how long a refresh
+# takes. OnBootSec arms the first firing after a reboot; install.sh runs one
+# refresh at standup, which arms the interval for the running box. The small
+# randomized delay keeps the demo from landing on the same instant as every other
+# scheduled job on a shared box.
+
+[Unit]
+Description=Refresh the Climate Impact Index demo snapshot every __REFRESH_INTERVAL__
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=__REFRESH_INTERVAL__
+RandomizedDelaySec=30
+AccuracySec=15s
+Unit=climate-index-refresh.service
+
+[Install]
+WantedBy=timers.target
