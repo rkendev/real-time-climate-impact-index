@@ -12,7 +12,10 @@
 #      volumes by target path, so this replaces the cii-data mount, it does not
 #      add a second one.
 #   2. deploy/vps is mounted read-only into the image so the backfill feeder runs
-#      inside the committed image with no rebuild and no new image role.
+#      inside the committed image with no rebuild and no new image role, and the
+#      three demo sizing values reach it there. Without this the feeder inside the
+#      container never sees them (the base file passes only the shared app
+#      environment) and silently runs its own defaults.
 #   3. the broker is capped to a small heap. This box is shared and the broker is
 #      up for a minute or two per refresh; it needs no room to grow.
 #
@@ -25,6 +28,14 @@ services:
       KAFKA_HEAP_OPTS: "-Xmx512m -Xms256m"
 
   producer:
+    environment:
+      # The two counts pass through empty when unset: the feeder reads an empty
+      # value as "use the bounded default", so no count is restated here. The
+      # fraction is a typed settings field that cannot parse an empty string, so
+      # its default is mirrored, the way the base file mirrors the other defaults.
+      CII_DEMO_WINDOWS: ${CII_DEMO_WINDOWS:-}
+      CII_DEMO_EVENTS_PER_WINDOW: ${CII_DEMO_EVENTS_PER_WINDOW:-}
+      CII_DEMO_DEGRADED_WINDOW_FRACTION: ${CII_DEMO_DEGRADED_WINDOW_FRACTION:-0.25}
     volumes:
       - ${CII_DEMO_STAGING_DIR:?set by deploy/vps/refresh.sh}:/data
       - ./deploy/vps:/app/deploy/vps:ro

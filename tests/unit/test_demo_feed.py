@@ -3,37 +3,76 @@
 The feeder is the only new thing in the refresh's write path, so it is held to
 the committed pipeline's own contract: every envelope it publishes passes the
 validation gate unchanged, lands on the event-time window it was aimed at, and
-carries both stream types per region per window (which is what grades a row
-MEASURED). The batch is bounded by the two configured counts, and the whole
-series slides forward as the clock advances, which is what makes the demo read as
-live rather than static.
+carries the coverage it meant to carry. The batch is bounded by the two
+configured counts, and the whole series slides forward as the clock advances,
+which is what makes the demo read as live rather than static.
+
+Coverage is deliberately uneven: most windows carry both stream types per region
+(the top tier), a deterministic minority carries weather only, and the oldest of
+those carries a single reading. The tier assertions below run the feeder's output
+through the committed validation gate and the committed engine, so what they
+check is what ``grade_confidence`` decides from that input. The feeder sets no
+grade, and neither does this test.
 """
 
 from __future__ import annotations
 
+from collections import Counter
 from datetime import UTC, datetime, timedelta
 
 import pytest
 
 from climate_index.adapters.memory import MemoryTransport
 from climate_index.config import Settings
+from climate_index.core.engine import compute_records
+from climate_index.core.models import Confidence
 from climate_index.core.validation import ValidationGate
 from climate_index.core.windowing import assign_window
-from feed_history import backfill_envelopes, positive_int_from_env, publish_backfill, window_slots
+from feed_history import (
+    backfill_envelopes,
+    degraded_window_ages,
+    positive_int_from_env,
+    publish_backfill,
+    window_slots,
+)
 
 REGIONS = ("EUR", "NAM", "AFR", "ASI")
 WINDOW_MINUTES = 30
 NOW = datetime(2026, 7, 21, 12, 20, tzinfo=UTC)
 
 
-def _settings() -> Settings:
-    return Settings(regions=",".join(REGIONS), window_minutes=WINDOW_MINUTES)
+def _settings(**overrides: object) -> Settings:
+    return Settings(
+        regions=",".join(REGIONS),
+        window_minutes=WINDOW_MINUTES,
+        _env_file=None,
+        **overrides,
+    )
+
+
+def _records(settings: Settings, **kwargs: object) -> list[object]:
+    """Run the feeder's output through the committed gate and engine."""
+    envelopes = backfill_envelopes(settings, now=NOW, **kwargs)  # type: ignore[arg-type]
+    gate = ValidationGate()
+    events = [gate.validate(env.model_dump(mode="json")) for env in envelopes]
+    assert gate.quarantined_count == 0
+    return compute_records([event for event in events if event is not None], settings)
 
 
 def test_backfill_is_bounded_by_the_configured_counts() -> None:
-    envelopes = backfill_envelopes(_settings(), windows=3, events_per_window=2, now=NOW)
-    # windows x events per window x regions x the two stream types.
-    assert len(envelopes) == 3 * 2 * len(REGIONS) * 2
+    settings = _settings()
+    envelopes = backfill_envelopes(settings, windows=8, events_per_window=2, now=NOW)
+
+    degraded = degraded_window_ages(8, settings.demo_degraded_window_fraction)
+    sparse = max(degraded)
+    full = 8 - len(degraded)
+    expected = (
+        full * 2 * len(REGIONS) * 2  # both stream types at every slot
+        + (len(degraded) - 1) * 2 * len(REGIONS)  # weather only
+        + len(REGIONS)  # the sparse window: one reading per region
+    )
+    assert len(envelopes) == expected
+    assert sparse == max(degraded)
 
 
 def test_backfill_covers_the_expected_windows_and_never_stamps_the_future() -> None:
@@ -49,17 +88,84 @@ def test_backfill_covers_the_expected_windows_and_never_stamps_the_future() -> N
     assert starts == {current_start - span * age for age in range(windows)}
 
 
-def test_every_region_and_window_carries_both_stream_types() -> None:
-    envelopes = backfill_envelopes(_settings(), windows=3, events_per_window=2, now=NOW)
+def test_coverage_is_full_except_on_the_degraded_minority() -> None:
+    settings = _settings()
+    windows = 12
+    envelopes = backfill_envelopes(settings, windows=windows, events_per_window=2, now=NOW)
+    degraded = degraded_window_ages(windows, settings.demo_degraded_window_fraction)
+    current_start, _ = assign_window(NOW, WINDOW_MINUTES)
+    span = timedelta(minutes=WINDOW_MINUTES)
 
-    seen: dict[tuple[str, datetime], set[str]] = {}
+    seen: dict[tuple[str, datetime], list[str]] = {}
     for envelope in envelopes:
         ts = datetime.fromisoformat(envelope.payload["ts"])
         key = (envelope.key, assign_window(ts, WINDOW_MINUTES)[0])
-        seen.setdefault(key, set()).add(str(envelope.event_type))
+        seen.setdefault(key, []).append(str(envelope.event_type))
 
-    assert len(seen) == 3 * len(REGIONS)
-    assert all(types == {"weather", "satellite"} for types in seen.values())
+    assert len(seen) == windows * len(REGIONS)  # every region in every window
+    for (_, start), types in seen.items():
+        age = round((current_start - start) / span)
+        if age not in degraded:
+            assert set(types) == {"weather", "satellite"}
+        elif age == max(degraded):
+            assert types == ["weather"]  # a single reading: sparse input
+        else:
+            assert set(types) == {"weather"}
+
+
+def test_the_committed_compute_grades_a_mixed_but_top_heavy_snapshot() -> None:
+    """The tier mix comes from the pipeline reading varied input, not from here."""
+    settings = _settings()
+    windows = 12
+    records = _records(settings, windows=windows, events_per_window=2)
+
+    grades = Counter(record.confidence for record in records)  # type: ignore[attr-defined]
+    assert grades[Confidence.MEASURED] > sum(
+        count for grade, count in grades.items() if grade is not Confidence.MEASURED
+    )
+    assert grades[Confidence.INFERRED] >= len(REGIONS)  # at least one window, every region
+    assert grades[Confidence.AMBIGUOUS] >= len(REGIONS)
+    assert sum(grades.values()) == windows * len(REGIONS)
+
+    # The window the page leads with is the fully covered one.
+    newest = max(record.window_start for record in records)  # type: ignore[attr-defined]
+    assert all(
+        record.confidence is Confidence.MEASURED  # type: ignore[attr-defined]
+        for record in records
+        if record.window_start == newest  # type: ignore[attr-defined]
+    )
+
+
+def test_every_region_sees_the_degraded_windows() -> None:
+    """A viewer sees the mechanism whichever region they select."""
+    settings = _settings()
+    records = _records(settings, windows=12, events_per_window=2)
+
+    for region in REGIONS:
+        grades = {
+            record.confidence  # type: ignore[attr-defined]
+            for record in records
+            if record.region == region  # type: ignore[attr-defined]
+        }
+        assert grades == {Confidence.MEASURED, Confidence.INFERRED, Confidence.AMBIGUOUS}
+
+
+def test_degraded_ages_are_deterministic_and_a_minority() -> None:
+    settings = _settings()
+    fraction = settings.demo_degraded_window_fraction
+
+    ages = degraded_window_ages(12, fraction)
+    assert ages == degraded_window_ages(12, fraction)  # same shape on every refresh
+    assert 0 not in ages  # the newest window is never thinned
+    assert len(ages) < 12 - len(ages)  # the top tier stays the majority
+    assert all(1 <= age < 12 for age in ages)
+
+    # Always at least one, so no snapshot hides the mechanism.
+    assert len(degraded_window_ages(2, fraction)) == 1
+    assert len(degraded_window_ages(3, 0.01)) == 1
+    # No room for a contrast in a single-window backfill, and none is faked.
+    assert degraded_window_ages(1, fraction) == ()
+    assert degraded_window_ages(12, 0.0) == ()
 
 
 def test_the_series_advances_with_the_clock() -> None:
@@ -77,8 +183,9 @@ def test_the_series_advances_with_the_clock() -> None:
 
 
 def test_published_envelopes_all_pass_the_committed_validation_gate() -> None:
+    """Thinner coverage never means a malformed event: nothing is quarantined."""
     transport = MemoryTransport()
-    envelopes = backfill_envelopes(_settings(), windows=2, events_per_window=2, now=NOW)
+    envelopes = backfill_envelopes(_settings(), windows=4, events_per_window=2, now=NOW)
 
     published = publish_backfill(transport, envelopes)
     assert published == len(envelopes) == len(transport)

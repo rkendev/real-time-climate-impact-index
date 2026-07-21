@@ -15,6 +15,15 @@ compute path and the store writer stay exactly where they are (INV-4, no core
 edit). The bootstrap servers arrive from config (INV-1); no endpoint literal
 appears here.
 
+Coverage varies on purpose. A deterministic minority of the backfilled windows
+receives thinner input: those windows carry weather readings only, and the oldest
+of them carries a single reading. Every event stays well-formed, so nothing is
+quarantined; what changes is only how much evidence a window holds. The committed
+confidence computation then grades those windows down on its own (NFR-DQ2,
+NFR-R4), which is what makes the provenance signal visible on the dashboard. This
+feeder sets no grade and never touches a stored row: it varies the input and
+lets the pipeline decide.
+
 Run inside the committed image for the length of a refresh only
 (``deploy/vps/refresh.sh`` mounts this directory read-only), never as a resident
 service.
@@ -63,6 +72,28 @@ def window_slots(
     )
 
 
+def degraded_window_ages(windows: int, fraction: float) -> tuple[int, ...]:
+    """Which windows get thinner coverage, by age from the newest (age zero).
+
+    Deterministic and evenly spread, so every refresh publishes the same shape and
+    the demo never depends on chance. Three rules hold the result honest:
+
+    * the newest window is never chosen, so the value the page leads with is
+      always the fully covered one;
+    * at least one window is chosen whenever there is more than one, so the
+      confidence mechanism is visible in every snapshot;
+    * at most ``windows - 1`` are chosen, and with any sensible fraction far
+      fewer, so the top tier stays the clear majority of the series.
+
+    A single-window backfill has no room for the contrast and gets none.
+    """
+    if windows < 2 or fraction <= 0:
+        return ()
+    count = min(windows - 1, max(1, int(windows * fraction)))
+    step = (windows - 1) / count
+    return tuple(sorted({1 + int(position * step) for position in range(count)}))
+
+
 def backfill_envelopes(
     settings: Settings,
     *,
@@ -70,18 +101,34 @@ def backfill_envelopes(
     events_per_window: int,
     now: datetime,
 ) -> list[EventEnvelope]:
-    """Build the bounded backfill: both stream types per region per window.
+    """Build the bounded backfill, with a deterministic minority thinly covered.
 
     Windows are walked oldest first up to the one currently open, on the same
     epoch-anchored grid the consumer buckets by (:func:`assign_window`), so the
     published timestamps land on exactly the windows this snapshot means to show.
-    Every window carries both a weather and a satellite reading per region, which
-    is what grades each row MEASURED rather than INFERRED (NFR-DQ2).
+
+    Coverage per window, and what the committed grader makes of it (NFR-DQ2):
+
+    * most windows carry both a weather and a satellite reading per region at
+      every slot, which is what grades them MEASURED;
+    * the windows :func:`degraded_window_ages` picks carry weather only, so one
+      component is imputed and the grade falls to INFERRED;
+    * the oldest of those carries a single weather reading per region, which is
+      below ``sparsity_min_events`` and grades AMBIGUOUS.
+
+    Every region appears in every window either way, so a snapshot stays complete.
+    Every event is well-formed, so the validation gate quarantines none of them:
+    the only thing varying is how much evidence a window holds. With
+    ``events_per_window`` at one, the weather-only windows are sparse too and
+    grade AMBIGUOUS rather than INFERRED; that is the grader's call on thinner
+    input, not a different intent here.
     """
     if windows <= 0:
         raise ValueError(f"windows must be positive: {windows}")
     current_start, _ = assign_window(now, settings.window_minutes)
     span = timedelta(minutes=settings.window_minutes)
+    degraded = degraded_window_ages(windows, settings.demo_degraded_window_fraction)
+    sparse_age = max(degraded) if degraded else None
 
     envelopes: list[EventEnvelope] = []
     for age in range(windows - 1, -1, -1):
@@ -92,10 +139,13 @@ def backfill_envelopes(
             events_per_window,
             not_after=now,
         )
+        if age == sparse_age:
+            slots = slots[:1]
         for ts in slots:
             for region in settings.region_list:
                 envelopes.append(EventEnvelope.wrap(generate_weather_event(region, ts=ts)))
-                envelopes.append(EventEnvelope.wrap(generate_satellite_event(region, ts=ts)))
+                if age not in degraded:
+                    envelopes.append(EventEnvelope.wrap(generate_satellite_event(region, ts=ts)))
     return envelopes
 
 
