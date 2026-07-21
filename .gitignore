@@ -17,6 +17,11 @@ data/
 infra/**/*.tfvars
 infra/**/zz_local_backend_override.tf
 
+# The real demo environment for the local live demo (never committed; INV-1).
+# Only the *.env.example placeholder is tracked, the same split as the tfvars.
+deploy/vps/*.env
+!deploy/vps/*.env.example
+
 # Python caches and tool state
 __pycache__/
 *.py[cod]

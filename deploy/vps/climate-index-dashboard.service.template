@@ -1,0 +1,49 @@
+# Always-on read-only dashboard for the local live demo (UC-5, FR-8, INV-2).
+#
+# Tracked template carrying placeholders only (INV-1). deploy/vps/install.sh
+# renders __REPO_ROOT__, __ENV_FILE__, and __DATA_DIR__ and writes the result to
+# /etc/systemd/system/climate-index-dashboard.service. Always edit this file, never
+# the installed copy: re-running install.sh overwrites the installed one.
+#
+# Why the repository venv rather than the container dashboard role
+#   The always-on piece is the one thing resident between refreshes, so it is the
+#   one place footprint matters. The venv already carries the pinned streamlit, so
+#   this costs a single Python process with no container runtime overhead, and it
+#   does not depend on the docker daemon that the other projects on this box
+#   restart. It also cannot be caught by the refresh teardown, which runs
+#   `compose down` on its own project. The container dashboard role stays the
+#   right answer on the cloud box, where compose is already the unit of delivery.
+#
+# Why loopback only
+#   Caddy owns 80 and 443 and is the public TLS front door. The dashboard binds
+#   127.0.0.1 so the only way in is through the reverse proxy.
+#
+# Why Restart=always with a crash-loop guard
+#   The demo must come back by itself after a crash and after a reboot with no
+#   human. The burst guard stops systemd from masking a real fault behind a
+#   permanent respawn loop; past the burst the unit fails and the journal explains.
+
+[Unit]
+Description=Climate Impact Index read-only dashboard (local DuckDB backend)
+After=network-online.target
+Wants=network-online.target
+StartLimitBurst=5
+StartLimitIntervalSec=60
+
+[Service]
+Type=exec
+User=root
+WorkingDirectory=__REPO_ROOT__
+EnvironmentFile=__ENV_FILE__
+Environment=PYTHONPATH=__REPO_ROOT__/src
+Environment=CII_AGGREGATE_BACKEND=duckdb
+Environment=CII_AGGREGATE_STORE_PATH=__DATA_DIR__/aggregates.duckdb
+ExecStart=__REPO_ROOT__/.venv/bin/streamlit run app/dashboard.py --server.address 127.0.0.1 --server.port ${CII_DEMO_PORT} --server.headless true --server.fileWatcherType none --browser.gatherUsageStats false
+Restart=always
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=climate-index-dashboard
+
+[Install]
+WantedBy=multi-user.target
