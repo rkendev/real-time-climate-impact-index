@@ -29,6 +29,7 @@ from datetime import UTC, datetime, timedelta, timezone
 from pathlib import Path
 from typing import cast
 
+import pyarrow.ipc
 import pytest
 
 from climate_index.adapters.duckdb import DuckDBAggregateStore, DuckDBReadOnlyAggregateStore
@@ -427,6 +428,7 @@ def test_the_real_page_renders_end_to_end_from_a_seeded_store(
     from streamlit.testing.v1 import AppTest
 
     db_path = _seed_store(tmp_path)
+    module = _load_dashboard_module()
     monkeypatch.setenv("CII_AGGREGATE_BACKEND", "duckdb")
     monkeypatch.setenv("CII_AGGREGATE_STORE_PATH", str(db_path))
     get_settings.cache_clear()
@@ -447,11 +449,24 @@ def test_the_real_page_renders_end_to_end_from_a_seeded_store(
     # What Streamlit actually put on the wire: both axes are the UTC clock labels
     # of the seeded windows, in chronological order, and the newest tick states
     # the same instant as the freshness caption above the charts.
-    specs = [json.loads(element.proto.spec) for element in app.get("vega_lite_chart")]
+    charts = list(app.get("vega_lite_chart"))
+    specs = [json.loads(element.proto.spec) for element in charts]
     assert len(specs) == 2
     for spec in specs:
         assert spec["encoding"]["x"]["sort"] == ["10:00", "11:00", "12:00"]
     assert any("2026-07-19 12:00 UTC" in caption.value for caption in app.caption)
+
+    # The rows travel with the chart, so neither chart draws an empty axis. A spec
+    # that referenced a dataset Streamlit never received would still carry the
+    # right labels above and plot nothing at all.
+    for element, spec in zip(charts, specs, strict=True):
+        assert "data" not in spec, "the rows must travel as data, not as a dataset reference"
+        rows = pyarrow.ipc.open_stream(element.proto.data.data).read_all().to_pylist()
+        assert [row[module.WINDOW_COLUMN] for row in rows] == [  # type: ignore[attr-defined]
+            "10:00",
+            "11:00",
+            "12:00",
+        ]
 
     # And the strip Streamlit rendered carries the configured tier colours.
     settings = Settings(_env_file=None)

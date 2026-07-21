@@ -12,8 +12,7 @@ Every one of those definitions is read from
 (INV-1). The page states nothing of its own: the band cutoffs come from
 ``label_thresholds``, the tier glosses from ``confidence_tier_glosses``, the strip
 colours from ``confidence_tier_colors``, and each window's grade is the value the
-pipeline stored on that row. Nothing here sets or
-adjusts a grade.
+pipeline stored on that row. Nothing here sets or adjusts a grade.
 
 Window times are written as UTC clock labels on the server (``as_utc`` is the one
 place the page handles zones, and ``window_axis_time_format`` holds the pattern),
@@ -208,7 +207,7 @@ def index_chart(view: RegionView, settings: Settings) -> alt.Chart:
     """
     labels = utc_axis_labels(view.window_starts, settings)
     return (
-        alt.Chart(data={"values": series_rows(view, settings)})
+        alt.Chart(alt.Data(values=series_rows(view, settings)))
         .mark_line(point=True)
         .encode(
             x=alt.X(field=WINDOW_COLUMN, type="ordinal", title=WINDOW_COLUMN, sort=list(labels)),
@@ -237,7 +236,7 @@ def confidence_chart(view: RegionView, settings: Settings) -> alt.Chart:
     labels = utc_axis_labels(view.window_starts, settings)
     tier_colors = settings.confidence_tier_colors
     return (
-        alt.Chart(data={"values": confidence_rows(view, settings)})
+        alt.Chart(alt.Data(values=confidence_rows(view, settings)))
         .mark_bar()
         .encode(
             x=alt.X(field=WINDOW_COLUMN, type="ordinal", title=WINDOW_COLUMN, sort=list(labels)),
@@ -283,7 +282,9 @@ def render(store: ReadOnlyAggregateStore, settings: Settings) -> None:
     st.subheader("Impact index over recent windows")
     st.altair_chart(index_chart(view, settings), width="stretch")
     st.caption(f"One point per {settings.window_minutes} minute window, oldest to newest.")
-    st.altair_chart(confidence_chart(view, settings), width="stretch", height=140)
+    # Sized by its content: constraining the height here leaves the axis and the
+    # legend nothing to sit in and the bars stop being drawn at all.
+    st.altair_chart(confidence_chart(view, settings), width="stretch")
     st.caption(
         "The strip carries the confidence grade the pipeline computed for each window "
         "from that window's input."

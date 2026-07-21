@@ -15,6 +15,11 @@ python_version = "3.12"
 strict = true
 plugins = ["pydantic.mypy"]
 files = ["src"]
+# Altair ships type information, but its schema wrappers (alt.Data and the rest
+# of the generated classes) have untyped constructors, so strict mode rejects the
+# call rather than the types. Exempt calls into that package instead of scattering
+# inline ignores through the dashboard; everything else stays fully strict.
+untyped_calls_exclude = ["altair"]
 # Resolve first-party imports (climate_index) when type-checking the scripts/
 # audit alongside src, without adding scripts to the checked file set wholesale.
 mypy_path = "src"
