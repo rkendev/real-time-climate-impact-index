@@ -109,6 +109,7 @@ Each use case has an ID, actors, a trigger, a main flow, and the requirements an
 - Actors: Viewer, Store.
 - Trigger: the viewer opens the dashboard and selects a region.
 - Main flow: the dashboard reads aggregate rows for the region through a read-only connection, plots the impact_index time series, shows the current value, the verbal label, and the confidence grade. The dashboard performs no computation and no writes.
+- Presentation: the page also explains itself to a first-time viewer. It states in plain language what the index is with its scale and direction (E-5, E-7), states that the feed is simulated rather than observed, shows the newest window time and the refresh cadence, and carries two legends: the confidence tiers with what drives each (NFR-DQ2) and the verbal-label band cutoffs (FR-9). The time series is plotted against real window times with the index range on the value axis, and each point carries its stored confidence grade. An about panel gives a one-line description of the pipeline and a link to the source repository. Every one of these definitions is read from configuration, which holds them as the single authority; the page invents none of them, computes nothing, and still issues no writes.
 - Satisfies: FR-8, FR-9, NFR-P3, NFR-SEC3, NFR-DQ2.
 
 ### UC-6 Operate through canonical commands

@@ -26,6 +26,23 @@ def test_defaults_are_the_single_authority() -> None:
     assert settings.region_baselines["EUR"] == 12.0
 
 
+def test_display_constants_are_the_single_authority(  # UC-5, NFR-DQ2
+) -> None:
+    settings = Settings(_env_file=None)
+    # The page's plain-language framing states the scale and the direction (E-5, E-7).
+    assert "0 to 100" in settings.index_summary
+    assert "Higher means" in settings.index_summary
+    assert "simulated" in settings.simulated_feed_notice.lower()
+    # The tier glosses cover exactly the three grades an aggregate row can carry.
+    assert set(settings.confidence_tier_glosses) == {"MEASURED", "INFERRED", "AMBIGUOUS"}
+    assert all(gloss for gloss in settings.confidence_tier_glosses.values())
+    assert settings.pipeline_summary
+    assert settings.source_repository_url.startswith("https://")
+    assert settings.demo_refresh_interval
+    # A minority share, so the demo keeps a top-tier majority.
+    assert 0.0 < settings.demo_degraded_window_fraction < 0.5
+
+
 def test_transport_endpoint_has_no_literal_default() -> None:
     settings = Settings(_env_file=None)
     assert settings.transport_bootstrap_servers is None
