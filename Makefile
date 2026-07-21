@@ -8,7 +8,8 @@ export PYTHONPATH := src
 
 .PHONY: bootstrap hooks lint type-check test infra_up run_producer run_processor smoke ui \
 	tf-fmt tf-validate tf-plan teardown-audit pre-deploy-gate container-smoke \
-	image-build image-push verify-at5 verify-nfr-p3
+	image-build image-push verify-at5 verify-nfr-p3 \
+	vps-demo-up vps-demo-down vps-demo-refresh vps-demo-status
 
 # Dummy credentials and provider skip flags let terraform validate and plan run
 # with zero AWS contact and zero spend. TF_STACKS is the full set; TF_PLAN_STACKS
@@ -164,4 +165,35 @@ pre-deploy-gate:
 #   5. terraform -chdir=infra/ephemeral destroy && make teardown-audit
 infra_up:
 	@echo "$@: run 'make pre-deploy-gate' then the documented P2-T3 apply sequence (gate G2)."
+
+# The always-on local live demo (RUNBOOK: "Local live demo"). Entirely the local
+# backend: no cloud credential is read, no cloud call is made, no cost. Standing it
+# up installs two units and one Caddy site block on the host, so these targets are
+# operator steps, not part of any gate.
+DEMO := deploy/vps
+
+# Stand the demo up (idempotent): git-ignored environment, derived host, rendered
+# units, one refresh, the timer, and the site block on the existing Caddy.
+vps-demo-up:
+	bash $(DEMO)/install.sh
+
+# Take it down: units removed, site block removed, refresh stack down with its
+# volume. Add ARGS=--purge to drop the served snapshot too.
+vps-demo-down:
+	bash $(DEMO)/uninstall.sh $(ARGS)
+
+# Run one refresh now (the same bounded pipeline the timer drives).
+vps-demo-refresh:
+	bash $(DEMO)/refresh.sh
+
+# What is resident, when the next refresh fires, and how fresh the snapshot is.
+vps-demo-status:
+	@systemctl --no-pager --lines=0 status climate-index-dashboard.service | head -4 || true
+	@systemctl list-timers --no-pager climate-index-refresh.timer || true
+	@echo "== containers in the demo project (expected: none between refreshes) =="
+	@docker ps --filter "label=com.docker.compose.project=$${CII_DEMO_COMPOSE_PROJECT:-cii-demo}" \
+		--format '{{.Names}}\t{{.Status}}' || true
+	@echo "== served snapshot =="
+	@set -a; . $(DEMO)/demo.env; set +a; \
+		ls -l "$$CII_DEMO_DATA_DIR/aggregates.duckdb" 2>/dev/null || echo "no snapshot published yet"
 

@@ -112,6 +112,58 @@ Tear down with the ephemeral destroy plus `make teardown-audit` as above.
 - Persistent layer left standing at near-zero rest (state, warehouse, and raw
   buckets; DynamoDB; Glue database; ECR image; budget alarm).
 
+## Local live demo (the always-on link)
+
+A separate thing from everything above: the public demo runs the **local** backend
+only (`CII_AGGREGATE_BACKEND=duckdb`), on a box already fronted by Caddy. It reads
+no cloud credential, makes no cloud call, and costs nothing. The AWS full-stack run
+stays on demand and is the recorded gate G2 above.
+
+Shape: an always-on read-only dashboard over a local DuckDB, plus a timer that
+refreshes the snapshot. Between refreshes only the dashboard is resident, roughly a
+quarter of a gigabyte; Kafka, the feeder, and the consumer exist for the minute or
+two a refresh takes and are torn down with it.
+
+```
+make vps-demo-up         # idempotent standup: units, first refresh, timer, Caddy site
+make vps-demo-status     # what is resident, next firing, snapshot freshness
+make vps-demo-refresh    # run one refresh now
+make vps-demo-down       # remove units and site block (ARGS=--purge drops the snapshot)
+```
+
+Standup writes `deploy/vps/demo.env` from the tracked placeholder, derives the
+public IPv4, and records `climate-index.<the address with dashes>.sslip.io` there.
+That file is git-ignored; only the `*.example` and the templates are tracked
+(INV-1). Caddy issues and renews the certificate for that name itself.
+
+**Cadence.** One value, `CII_DEMO_REFRESH_INTERVAL` in `deploy/vps/demo.env`
+(default `30min`). Change it and re-run `make vps-demo-up`; the timer is re-rendered
+and re-armed. `CII_DEMO_WINDOWS` and `CII_DEMO_EVENTS_PER_WINDOW` size each
+snapshot (default twelve windows, so six hours of series at the 30 minute window).
+
+**What a refresh does.** Wipes the staging directory, brings single-node Kafka up on
+its own compose project, publishes a bounded backfill across the last N event-time
+windows, drains it with the committed consumer into a staging DuckDB, publishes that
+snapshot, then brings every streaming component down. Bounded input plus a wiped
+staging area means each snapshot is self-contained and the disk footprint stays flat.
+
+**Atomic publish.** `deploy/vps/publish_snapshot.py` verifies the staging snapshot
+through the same read-only factory the dashboard reads with (every region present,
+natural keys unique, no write-ahead log), then renames it over the served path. The
+writer only ever holds the staging file, so the reader never contends for the DuckDB
+lock; the rename is atomic, so a render sees a whole snapshot or the whole previous
+one. A refresh that fails anywhere before that step publishes nothing and the last
+good snapshot keeps serving. `tests/unit/test_atomic_publish.py` holds that line.
+
+**Caddy.** The site block is appended between managed markers, validated, and
+reloaded; the existing configuration is never replaced and the other sites are
+untouched. A backup is left at `/etc/caddy/Caddyfile.bak.climate-index`, and
+`make vps-demo-down` removes the block the same way.
+
+**Recovery.** The dashboard unit is `Restart=always` and enabled, so it returns
+after a crash and after a reboot with no human. The timer is enabled too, and fires
+two minutes after boot.
+
 ## Notes learned on the run (folded into the code)
 
 - Real applies pass `TF_VAR_offline_plan=false` so the provider resolves the
