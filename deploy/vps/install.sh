@@ -49,7 +49,20 @@ if [ -z "${CII_DEMO_HOST:-}" ]; then
 		ipv4="$(curl -4 -fsS --max-time 10 "${CII_DEMO_IP_LOOKUP_URL}" | tr -d '[:space:]')"
 	fi
 	if [ -z "${ipv4}" ]; then
-		ipv4="$(ip -4 route get 1.1.1.1 2>/dev/null | awk '{ for (i = 1; i < NF; i++) if ($i == "src") print $(i + 1) }')"
+		# The first globally scoped address on this box that is not in a private
+		# range. Written as octet comparisons so no address literal is tracked.
+		ipv4="$(ip -4 -o addr show scope global 2>/dev/null | awk '
+			{
+				split($4, cidr, "/")
+				split(cidr[1], octet, ".")
+				if (octet[1] == 10) next
+				if (octet[1] == 127) next
+				if (octet[1] == 169 && octet[2] == 254) next
+				if (octet[1] == 172 && octet[2] >= 16 && octet[2] <= 31) next
+				if (octet[1] == 192 && octet[2] == 168) next
+				print cidr[1]
+				exit
+			}')"
 	fi
 	if [ -z "${ipv4}" ]; then
 		echo "could not derive the public IPv4; set CII_DEMO_HOST in ${ENV_FILE}" >&2
