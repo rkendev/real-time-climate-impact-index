@@ -13,9 +13,9 @@
 #      add a second one.
 #   2. deploy/vps is mounted read-only into the image so the backfill feeder runs
 #      inside the committed image with no rebuild and no new image role, and the
-#      three demo sizing values reach it there. Without this the feeder inside the
-#      container never sees them (the base file passes only the shared app
-#      environment) and silently runs its own defaults.
+#      demo sizing values plus the source selection reach it there. Without this
+#      the feeder inside the container never sees them (the base file passes only
+#      the shared app environment) and silently runs its own defaults.
 #   3. the broker is capped to a small heap. This box is shared and the broker is
 #      up for a minute or two per refresh; it needs no room to grow.
 #
@@ -36,12 +36,26 @@ services:
       CII_DEMO_WINDOWS: ${CII_DEMO_WINDOWS:-}
       CII_DEMO_EVENTS_PER_WINDOW: ${CII_DEMO_EVENTS_PER_WINDOW:-}
       CII_DEMO_DEGRADED_WINDOW_FRACTION: ${CII_DEMO_DEGRADED_WINDOW_FRACTION:-0.25}
+      # Which source the feeder pulls from, and the endpoints it needs when that
+      # is the real one. All empty-safe: unset means the simulated default, and
+      # the feeder refuses rather than guessing if real is asked for without them.
+      CII_SOURCE_BACKEND: ${CII_SOURCE_BACKEND:-simulated}
+      CII_OPEN_METEO_WEATHER_URL: ${CII_OPEN_METEO_WEATHER_URL:-}
+      CII_OPEN_METEO_AIR_QUALITY_URL: ${CII_OPEN_METEO_AIR_QUALITY_URL:-}
+      CII_DEMO_PAST_DAYS: ${CII_DEMO_PAST_DAYS:-}
+      # Hourly readings need hourly windows, and the consumer must bucket on the
+      # same grid the feeder published against, so both roles get this value.
+      CII_WINDOW_MINUTES: ${CII_WINDOW_MINUTES:-30}
     volumes:
       - ${CII_DEMO_STAGING_DIR:?set by deploy/vps/refresh.sh}:/data
       - ./deploy/vps:/app/deploy/vps:ro
     restart: "no"
 
   consumer:
+    environment:
+      # The consumer must bucket on the same window grid the feeder published
+      # against, or the hourly readings would land in windows nobody wrote.
+      CII_WINDOW_MINUTES: ${CII_WINDOW_MINUTES:-30}
     volumes:
       - ${CII_DEMO_STAGING_DIR:?set by deploy/vps/refresh.sh}:/data
     restart: "no"

@@ -25,7 +25,7 @@ import pytest
 from climate_index.adapters.memory import MemoryTransport
 from climate_index.config import Settings
 from climate_index.core.engine import compute_records
-from climate_index.core.models import Confidence
+from climate_index.core.models import Confidence, SatelliteEvent, WeatherEvent
 from climate_index.core.validation import ValidationGate
 from climate_index.core.windowing import assign_window
 from feed_history import (
@@ -226,3 +226,54 @@ def test_counts_come_from_the_environment_with_a_bounded_default(
     monkeypatch.setenv("CII_DEMO_WINDOWS", "0")
     with pytest.raises(ValueError, match="must be positive"):
         positive_int_from_env("CII_DEMO_WINDOWS", 12)
+
+
+def test_real_mode_publishes_the_fetched_readings_untouched(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """No coverage is varied and no window is thinned in real mode (ADR-0007).
+
+    The demo's degradation knob exists because a generated feed cannot produce a
+    real gap. A real feed can, so applying the knob on top would be manufacturing
+    sparsity that the provider did not actually have, and the grade would then be
+    reporting the demo rather than the data.
+    """
+    import feed_history
+
+    settings = Settings(
+        _env_file=None,
+        source_backend="real",
+        open_meteo_weather_url="https://weather.invalid/v1/forecast",
+        open_meteo_air_quality_url="https://air.invalid/v1/air-quality",
+        demo_degraded_window_fraction=0.9,
+    )
+    ts = datetime(2026, 7, 22, 11, 0, tzinfo=UTC)
+    fetched = [
+        WeatherEvent(ts=ts, region="EUR", temperature_c=18.0, rainfall_mm=0.0, wind_speed_ms=3.0),
+        SatelliteEvent(
+            ts=ts, region="EUR", cloud_cover_pct=50.0, vegetation_index=0.5, aerosol_index=0.2
+        ),
+    ]
+
+    class StubSource:
+        missing_count = 0
+
+        def fetch_history(self, *, past_days: int = 1) -> list[object]:
+            assert past_days == 1
+            return list(fetched)
+
+    # real_backfill_envelopes imports the adapter inside the function (the client
+    # stays lazy), so patching the real class is what the call actually resolves.
+    from climate_index.adapters.openmeteo import OpenMeteoEventSource
+
+    monkeypatch.setattr(OpenMeteoEventSource, "from_settings", lambda *a, **k: StubSource())
+
+    envelopes = feed_history.real_backfill_envelopes(settings, past_days=1)
+
+    # Exactly what was fetched, region-keyed, with nothing dropped or added
+    # despite a degradation fraction of 0.9 being configured.
+    assert len(envelopes) == 2
+    assert {e.key for e in envelopes} == {"EUR"}
+    gate = ValidationGate()
+    for envelope in envelopes:
+        assert gate.validate(envelope.model_dump(mode="json")) is not None

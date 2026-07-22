@@ -4,9 +4,26 @@
 The committed producer role stamps every event at the current instant, so one
 bounded batch forms exactly one event-time window per region. The demo wants a
 snapshot that reads as a moving series, so this feeder publishes the very same
-envelopes over the very same Kafka transport, but stamped across the last N
-event-time windows. Each refresh therefore rebuilds one bounded, self-contained
-history whose whole series slides forward as time passes.
+envelopes over the very same Kafka transport across a span of event-time
+windows. Each refresh therefore rebuilds one bounded, self-contained history
+whose whole series slides forward as time passes.
+
+It follows the configured source (``CII_SOURCE_BACKEND``), like everything else:
+
+* simulated: the committed generators, stamped across the last N windows, with a
+  deterministic minority of windows given thinner coverage so the confidence
+  mechanism is visible on a feed that cannot produce a real gap;
+* real: the past day of genuine hourly readings from the Open-Meteo adapter, at
+  their true timestamps. No coverage is varied and nothing is thinned. Whatever
+  gaps the provider actually had are what the grader sees, which is the entire
+  reason the real source is worth having.
+
+Real mode is a continuous replay by design. Each refresh republishes hours it
+has already published, and because window boundaries are a truncation of event
+time and the aggregate write is idempotent on ``(region, window_start,
+window_end)``, a re-published hour lands on the same row rather than duplicating
+it. That is precisely the property FR-6, NFR-R1, and AT-5 exist to prove, now
+exercised continuously by the public demo instead of only inside a test.
 
 It reuses the committed generators, the envelope, the window grid, and the Kafka
 transport adapter. It computes no index, opens no store, and writes nothing: the
@@ -47,6 +64,12 @@ from climate_index.logging_utils import StructuredLogger, get_logger
 # resident load. Both are overridable from the demo environment.
 DEFAULT_WINDOWS = 12
 DEFAULT_EVENTS_PER_WINDOW = 2
+
+# Real mode: how many past days of hourly readings each refresh republishes. One
+# day at hourly resolution is 24 windows per region at the demo's 60 minute
+# window, a comparable span to the simulated backfill above and one request per
+# city per endpoint however wide it is.
+DEFAULT_PAST_DAYS = 1
 
 
 def window_slots(
@@ -149,6 +172,37 @@ def backfill_envelopes(
     return envelopes
 
 
+def real_backfill_envelopes(
+    settings: Settings,
+    *,
+    past_days: int,
+    logger: StructuredLogger | None = None,
+) -> list[EventEnvelope]:
+    """Wrap the past ``past_days`` of real hourly readings as region-keyed envelopes.
+
+    No coverage is varied and no window is thinned: the demo knob that exists to
+    make the confidence signal visible on a synthetic feed has no business here,
+    because a real feed produces real gaps on its own. Whatever the provider did
+    not return simply is not published, and the committed grader reads that.
+
+    The adapter is reached by concrete type rather than through the source
+    factory, because the historical fetch is deliberately not part of the
+    one-tick EventSource Protocol (ADR-0007).
+    """
+    from climate_index.adapters.openmeteo import OpenMeteoEventSource
+
+    source = OpenMeteoEventSource.from_settings(settings, logger=logger)
+    events = source.fetch_history(past_days=past_days)
+    if logger is not None:
+        logger.event(
+            "demo_real_history_fetched",
+            past_days=past_days,
+            events=len(events),
+            unavailable=source.missing_count,
+        )
+    return [EventEnvelope.wrap(event) for event in events]
+
+
 def publish_backfill(
     transport: Transport,
     envelopes: list[EventEnvelope],
@@ -175,11 +229,13 @@ def positive_int_from_env(name: str, default: int) -> int:
 
 
 def main() -> int:
-    """Publish one bounded backfill to the configured broker.
+    """Publish one bounded backfill to the configured broker, from the configured source.
 
     With no broker configured this exits non-zero without importing the Kafka
     client, so a misconfigured refresh fails loudly instead of publishing an empty
-    snapshot over a good one.
+    snapshot over a good one. Real mode that fetches nothing at all is treated the
+    same way: publishing an empty backfill would wipe a good snapshot, and the
+    refresh script keeps serving the previous one instead.
     """
     settings = get_settings()
     log = get_logger("demo_feed")
@@ -190,14 +246,25 @@ def main() -> int:
 
     from climate_index.adapters.kafka import KafkaTransport
 
-    envelopes = backfill_envelopes(
-        settings,
-        windows=positive_int_from_env("CII_DEMO_WINDOWS", DEFAULT_WINDOWS),
-        events_per_window=positive_int_from_env(
-            "CII_DEMO_EVENTS_PER_WINDOW", DEFAULT_EVENTS_PER_WINDOW
-        ),
-        now=datetime.now(UTC),
-    )
+    if settings.source_backend == "real":
+        envelopes = real_backfill_envelopes(
+            settings,
+            past_days=positive_int_from_env("CII_DEMO_PAST_DAYS", DEFAULT_PAST_DAYS),
+            logger=log,
+        )
+        if not envelopes:
+            log.event("no_real_readings_available", note="serving the previous snapshot")
+            return 3
+    else:
+        envelopes = backfill_envelopes(
+            settings,
+            windows=positive_int_from_env("CII_DEMO_WINDOWS", DEFAULT_WINDOWS),
+            events_per_window=positive_int_from_env(
+                "CII_DEMO_EVENTS_PER_WINDOW", DEFAULT_EVENTS_PER_WINDOW
+            ),
+            now=datetime.now(UTC),
+        )
+
     publish_backfill(KafkaTransport(settings.transport_bootstrap_servers), envelopes, logger=log)
     return 0
 
