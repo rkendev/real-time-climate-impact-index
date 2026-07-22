@@ -1,6 +1,6 @@
 # Real-Time Climate Impact Index
 
-A streaming data pipeline that turns a live feed of weather and satellite readings into a per-region Climate Impact Index, with a confidence label attached to every number, and runs the exact same processing code on a laptop or on AWS by changing one config flag.
+A streaming data pipeline that turns live weather and air quality readings into a per-region Climate Impact Index, with a confidence label attached to every number, and runs the exact same processing code on a laptop or on AWS by changing one config flag.
 
 Live demo: https://climate-index.85-215-55-99.sslip.io
 
@@ -10,7 +10,9 @@ Github repo: github.com/rkendev/real-time-climate-impact-index
 
 Most streaming demos show a number moving on a chart and ask you to trust it. This project takes the opposite stance: every index value is paired with a confidence label that is computed from how much clean data actually backed that window, and readings that fail validation are quarantined rather than silently averaged in. If the evidence for a region is thin, the dashboard says so instead of pretending the number is solid.
 
-The pipeline simulates weather and satellite sources, publishes them to a single-node Kafka broker, runs a deterministic validation-and-quarantine gate, aggregates the survivors into event-time tumbling windows keyed by a natural identity so a replay produces the same row rather than a duplicate, computes the index and its confidence, and writes the result to a store that a read-only Streamlit dashboard reads back.
+The pipeline reads weather and air quality readings for representative cities in each region, publishes them to a single-node Kafka broker, runs a deterministic validation-and-quarantine gate, aggregates the survivors into event-time tumbling windows keyed by a natural identity so a replay produces the same row rather than a duplicate, computes the index and its confidence, and writes the result to a store that a read-only Streamlit dashboard reads back.
+
+The source is itself a config-selected adapter, exactly like the storage backend. `real` fetches live readings from Open-Meteo; `simulated` runs the original generators and remains the default, so the test suite and the local quickstart stay offline and deterministic. That distinction is what makes the confidence grade mean something. On a generated feed nothing can fail to arrive, so a low grade had to be arranged deliberately. On the real feed a timed-out request or a null field produces a genuine gap, and the committed grader turns that gap into a lower grade on its own. Nothing anywhere sets a grade by hand, and a reading that fails to arrive is left out rather than filled in.
 
 The distinctive engineering choice is portability. The core processing code has no cloud SDK in it at all. A single configuration flag selects the storage backend: locally the aggregates land in DuckDB and the raw feed in the local filesystem; on AWS the same aggregates land in an Apache Iceberg table cataloged in Glue on S3, the serving copy lands in DynamoDB, and the raw feed lands in plain S3. The processor does not know or care which one is active. That is enforced, not aspirational: a test invariant fails the build if any cloud SDK import appears under the core package.
 
@@ -18,8 +20,10 @@ The distinctive engineering choice is portability. The core processing code has 
 
 ```mermaid
 flowchart TB
-    W[Weather readings] --> P[Producer]
-    S[Satellite readings] --> P
+    W[Open-Meteo weather] --> SRC[Source adapter<br/>selected by one config flag]
+    S[Open-Meteo air quality] --> SRC
+    G[Simulated generators] --> SRC
+    SRC --> P[Producer]
     P -->|events| K[Kafka broker<br/>single-node KRaft]
     K --> V{Validate and<br/>quarantine}
     V -->|invalid| Q[Quarantine]
@@ -34,7 +38,7 @@ flowchart TB
     DYN --> DASH
 ```
 
-Simulated sources publish to Kafka; a deterministic gate validates each event or quarantines it; the survivors are bucketed into event-time windows and reduced to an index with a confidence grade; and a single config flag routes the result to DuckDB locally or to S3 with Apache Iceberg via Glue plus DynamoDB on AWS, all behind the same interface, with the read-only dashboard reading the local aggregates or the AWS serving store.
+The configured source publishes to Kafka; a deterministic gate validates each event or quarantines it; the survivors are bucketed into event-time windows and reduced to an index with a confidence grade; and a single config flag routes the result to DuckDB locally or to S3 with Apache Iceberg via Glue plus DynamoDB on AWS, all behind the same interface, with the read-only dashboard reading the local aggregates or the AWS serving store.
 
 ## How it is built
 
@@ -62,7 +66,7 @@ The local path needs no cloud account. It brings up a single-node Kafka broker, 
 make bootstrap        # create the virtualenv and install pinned deps
 make hooks            # install the pre-commit hygiene gates
 make run_processor    # start the validation, windowing, and index compute
-make run_producer     # feed simulated weather and satellite readings
+make run_producer     # feed readings from the configured source (simulated by default)
 make ui               # open the read-only Streamlit dashboard
 ```
 
@@ -109,13 +113,21 @@ The specification set is meant to be read in order.
 - `docs/40_tasks.md`: the ordered task backlog for the local phase.
 - `docs/50_cloud_strategy.md`: the local-first-then-AWS path and why AWS is the only cloud target.
 - `docs/60_panjuta_application.md`: how the reusable patterns harvested from earlier work apply to this pipeline.
-- `adr/`: the architecture decision records. ADR-0002 selects the Python consumer, ADR-0003 selects the cheapest viable AWS shape under a fifty-dollar ceiling, ADR-0004 is the non-functional invariant law, ADR-0005 records the Terraform setup-and-teardown design that keeps costly resources from lingering, and ADR-0006 records ECR as the image-delivery mechanism.
+- `adr/`: the architecture decision records. ADR-0002 selects the Python consumer, ADR-0003 selects the cheapest viable AWS shape under a fifty-dollar ceiling, ADR-0004 is the non-functional invariant law, ADR-0005 records the Terraform setup-and-teardown design that keeps costly resources from lingering, ADR-0006 records ECR as the image-delivery mechanism, and ADR-0007 records the event-source adapter, the choice of data provider, and the rule that a missing reading is never fabricated.
 - `RUNBOOK.md`: the one-command cloud re-demo and the recorded spend.
 - `SETUP.md`: local setup and the recorded G1 timing.
 
 ## Traceability contract
 
 Every functional requirement (FR-), non-functional requirement (NFR-), use case (UC-), entity (E-), invariant (INV-), and acceptance test (AT-) has a stable ID. Downstream code, tests, and infrastructure reference these IDs. A change to behavior starts as an edit to the ID that owns it, not as a code patch. The repository name is brand-neutral and the Python package is `climate_index`, consistent with the project's clean-commit-trail rule.
+
+## Data sources and attribution
+
+In real mode the readings come from [Open-Meteo](https://open-meteo.com/): the forecast API for temperature, precipitation, wind speed, and cloud cover, and the air quality API for aerosol optical depth. Both are free for non-commercial use and need no API key, and the demo's request volume sits far below the free tier.
+
+Weather and air quality data by Open-Meteo. Atmospheric composition from the CAMS ENSEMBLE data provider.
+
+Two honest caveats, stated on the dashboard as well as here. These products are model analyses rather than station observations, so the page says "readings" and never "observations". And there is no free live per-coordinate vegetation index at this integration cost, so the vegetation term is a per-region monthly reference value held in configuration; it is not a measurement and is never presented as one. The per-region temperature normals are derived from ERA5 daily means over 1991-2020 for the same cities, and the derivation parameters are recorded in the specification so the constants are reproducible.
 
 ## Tech
 

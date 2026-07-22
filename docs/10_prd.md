@@ -8,7 +8,7 @@ This document states what the system must do (functional requirements) and, with
 
 ## 1. Actors
 
-- Producer: a simulated source that emits weather and satellite events for the configured regions.
+- Producer: emits weather and satellite events for the configured regions from the source selected by configuration, the simulated generators or a real fetched feed (UC-1, ADR-0007).
 - Stream processor: the component that validates, windows, and computes the index.
 - Store: the persistence layer holding raw events and per-region-per-window aggregates.
 - Viewer: a human reading the read-only dashboard.

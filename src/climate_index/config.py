@@ -190,8 +190,7 @@ class Settings(BaseSettings):
     # ``label_thresholds`` above, which stays their single authority.
     index_summary: str = (
         "The Climate Impact Index scores each region from 0 to 100 by combining a temperature "
-        "anomaly, a dryness index, and a pollution index. Higher means greater simulated "
-        "climate impact."
+        "anomaly, a dryness index, and a pollution index. Higher means greater climate impact."
     )
     index_axis_label: str = "Impact index (0 to 100)"
     # How a window start is written on the chart's time axis. The label is
@@ -254,9 +253,9 @@ class Settings(BaseSettings):
 
     # UC-1 to UC-5 in one line, for the dashboard's about panel.
     pipeline_summary: str = (
-        "Simulated sources publish to Kafka, a deterministic gate validates or quarantines each "
-        "event, the processor buckets events into event-time windows and computes the index with "
-        "its confidence grade, and this page reads the published snapshot read-only."
+        "The configured source publishes to Kafka, a deterministic gate validates or quarantines "
+        "each event, the processor buckets events into event-time windows and computes the index "
+        "with its confidence grade, and this page reads the published snapshot read-only."
     )
 
     # Public source repository for the about panel. A published documentation

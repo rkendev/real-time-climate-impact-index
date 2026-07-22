@@ -2,11 +2,11 @@
 
 ## One-line summary
 
-A real-time streaming pipeline that computes a Climate Impact Index per geographic region over recent time windows from two simulated data streams (weather metrics and satellite-style summaries), persists the results, and shows them in a read-only dashboard.
+A real-time streaming pipeline that computes a Climate Impact Index per geographic region over recent time windows from two data streams (weather metrics and atmospheric-composition summaries), persists the results, and shows them in a read-only dashboard. The stream source is selected by configuration: real readings fetched from a live provider, or the simulated generators the project was first built against (ADR-0007).
 
 ## The story
 
-Two kinds of events arrive continuously for a small set of regions. Weather events carry temperature, rainfall, and wind. Satellite-style events carry cloud cover, a vegetation or dryness score, and an aerosol or pollution score. Both streams are simulated by a producer, so the project needs no external API keys or paid data feeds to run.
+Two kinds of events arrive continuously for a small set of regions. Weather events carry temperature, rainfall, and wind. Satellite-style events carry cloud cover, a vegetation or dryness score, and an aerosol or pollution score. Either stream can be produced by the simulated generators or fetched from the real provider, chosen by one configuration flag. The simulated source remains the default, so the project still needs no API key and no paid data feed to run, and the real source needs no key either.
 
 A stream processor consumes these events, validates them against a fixed schema, computes per-region climate features (a temperature anomaly, a dryness index, a pollution index), and combines them into a single Climate Impact Index over a sliding time window, for example the last thirty minutes. The index and its component metrics are written to a store, one row per region per window. A dashboard reads that store and shows the index over time per region, the current value, and a short verbal label (low, medium, high).
 
@@ -47,4 +47,4 @@ The earlier build recorded several lessons that this spec bakes in from the star
 
 ## Success in one sentence
 
-From simulated events to a correct, non-empty chart of the Climate Impact Index per region, proven locally by a green smoke test, with the same core code ready to run behind managed services on AWS.
+From events, simulated or real, to a correct, non-empty chart of the Climate Impact Index per region, proven locally by a green smoke test, with the same core code ready to run behind managed services on AWS.

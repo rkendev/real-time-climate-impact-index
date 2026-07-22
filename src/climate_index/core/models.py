@@ -72,7 +72,11 @@ class ReasonCode(StrEnum):
 
 
 class WeatherEvent(BaseModel):
-    """E-2 WeatherEvent: one synthetic weather reading for a region."""
+    """E-2 WeatherEvent: one weather reading for a region.
+
+    The shape does not vary by source (UC-1): the simulated source samples a
+    plausible range, the real source carries a fetched reading.
+    """
 
     model_config = ConfigDict(extra="forbid")
 
@@ -84,7 +88,14 @@ class WeatherEvent(BaseModel):
 
 
 class SatelliteEvent(BaseModel):
-    """E-3 SatelliteEvent: one synthetic satellite reading for a region."""
+    """E-3 SatelliteEvent: one atmospheric-composition reading for a region.
+
+    Named satellite on the wire for continuity of E-4 and the store schema. Under
+    the real source it carries modeled atmospheric composition (an aerosol optical
+    depth) with observed cloud cover, and a vegetation value that is a configured
+    monthly reference rather than a measurement; see the E-3 provenance note in
+    the specification. The field shapes do not vary by source.
+    """
 
     model_config = ConfigDict(extra="forbid")
 
