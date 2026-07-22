@@ -11,6 +11,21 @@ endpoint is passed with an explicit http scheme (the ARROW-16437 symptom).
 
 Each test gets its own buckets, DynamoDB table, and SQLite catalog file, so tests
 are isolated without resetting shared state.
+
+The fake credentials are scoped to a single test, not to the session. The
+adapters under test build their own boto3 clients and read credentials from the
+environment, so the environment is where the fakes have to go; but a
+session-scoped assignment stays in ``os.environ`` for every later test in the
+run, including tests in other packages that shell out. That leaked into
+``tests/unit/test_pre_deploy_gate.py``, whose subprocess ran ``terraform init``
+against the real ``infra/`` tree and got a 403 from STS for a token that was
+never meant to leave this package. The function-scoped ``monkeypatch`` fixture
+undoes each assignment when the test ends, so nothing escapes.
+
+The moto server fixture stays session-scoped: starting one server per test would
+be slow and it holds no credential state. It is set up before any function-scoped
+fixture, so its healthcheck cannot rely on the environment and passes its
+credentials explicitly instead.
 """
 
 from __future__ import annotations
@@ -43,12 +58,24 @@ def _free_port() -> int:
 
 
 def _healthcheck_pyarrow_s3(endpoint: str) -> None:
-    """Put and get through the PyArrow S3 file IO so an http misconfig fails early."""
+    """Put and get through the PyArrow S3 file IO so an http misconfig fails early.
+
+    Credentials are passed explicitly rather than read from the environment.
+    This runs during the session-scoped server setup, which pytest performs
+    before any function-scoped fixture, so the per-test credential fixture has
+    not run yet and the environment may hold nothing at all.
+    """
     import boto3
     import pyarrow.fs as pafs
 
     bucket = "cii-healthcheck"
-    client = boto3.client("s3", endpoint_url=endpoint, region_name=_REGION)
+    client = boto3.client(
+        "s3",
+        endpoint_url=endpoint,
+        region_name=_REGION,
+        aws_access_key_id=_FAKE_CREDENTIALS["AWS_ACCESS_KEY_ID"],
+        aws_secret_access_key=_FAKE_CREDENTIALS["AWS_SECRET_ACCESS_KEY"],
+    )
     client.create_bucket(Bucket=bucket)
     filesystem = pafs.S3FileSystem(
         access_key="testing",
@@ -65,22 +92,23 @@ def _healthcheck_pyarrow_s3(endpoint: str) -> None:
             raise RuntimeError("moto S3 PyArrow file IO healthcheck failed")
 
 
-@pytest.fixture(scope="session", autouse=True)
-def _aws_credentials() -> Iterator[None]:
-    import os
+@pytest.fixture(autouse=True)
+def _aws_credentials(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Put the fake credentials in the environment for the length of one test.
 
-    prior = {key: os.environ.get(key) for key in _FAKE_CREDENTIALS}
-    os.environ.update(_FAKE_CREDENTIALS)
-    yield
-    for key, value in prior.items():
-        if value is None:
-            os.environ.pop(key, None)
-        else:
-            os.environ[key] = value
+    Function-scoped on purpose. The adapters read credentials from the
+    environment, so the fakes have to go there, but they must not outlive the
+    test that needed them: anything still set afterwards is handed to every
+    later test in the session, including ones in other packages that start
+    subprocesses. ``monkeypatch`` undoes each assignment at teardown, restoring
+    whatever the environment held before, real credentials included.
+    """
+    for key, value in _FAKE_CREDENTIALS.items():
+        monkeypatch.setenv(key, value)
 
 
 @pytest.fixture(scope="session")
-def moto_endpoint(_aws_credentials: None) -> Iterator[str]:
+def moto_endpoint() -> Iterator[str]:
     from moto.server import ThreadedMotoServer
 
     port = _free_port()
