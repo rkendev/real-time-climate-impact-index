@@ -11,6 +11,11 @@ streamlit==1.59.2
 boto3==1.43.51
 pyiceberg[glue,pyarrow]==0.11.1
 pyarrow==24.0.0
+# HTTP client for the real event source (ADR-0007). Imported lazily inside the
+# Open-Meteo adapter's run path only, so offline test collection never loads it
+# and INV-6 keeps it out of the core entirely. Ships type information, so strict
+# mypy needs no stub and no override entry.
+httpx==0.28.1
 # Kafka client for the live-broker path (ADR-0002). Imported lazily inside the
 # transport adapter only, so offline test collection never loads it; the
 # container stack and the P2-T3 broker smoke are the first users. The wheel
