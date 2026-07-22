@@ -64,17 +64,6 @@ class Settings(BaseSettings):
     # (NFR-S1). Use ``region_list`` for the parsed tuple.
     regions: str = "EUR,NAM,AFR,ASI"
 
-    # E-7 per-region temperature normal baselines (degrees Celsius). The mean
-    # temperature in a window minus this baseline is the temperature anomaly.
-    region_baselines: dict[str, float] = Field(
-        default_factory=lambda: {
-            "EUR": 12.0,
-            "NAM": 14.0,
-            "AFR": 24.0,
-            "ASI": 20.0,
-        }
-    )
-
     # E-7 representative cities per region: the sampling points the real event
     # source fetches (UC-1, ADR-0007). Three per region, so one city failing to
     # answer thins a window rather than emptying it, and the sparsity and

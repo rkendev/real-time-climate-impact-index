@@ -11,9 +11,9 @@ dashboard can use it without importing this compute path (INV-2, AT-6).
 
 Chosen bounded forms (E-7 leaves the exact form to the implementation):
 
-* ``temperature_anomaly`` = mean ``temperature_c`` minus the per-region baseline.
-  Raw degrees Celsius, may be negative; it is the one component metric the spec
-  does not bound.
+* ``temperature_anomaly`` = mean ``temperature_c`` minus the per-region normal
+  for the window's calendar month. Raw degrees Celsius, may be negative; it is
+  the one component metric the spec does not bound.
 * ``dryness_index`` in ``[0, 1]``, rising as it gets drier. The mean of up to two
   sub-scores: a rainfall sub-score ``clamp(1 - mean_rainfall / saturation, 0, 1)``
   (weather) and a vegetation sub-score ``(1 - mean_vegetation_index) / 2``
@@ -51,16 +51,25 @@ def _mean(values: Sequence[float]) -> float:
 def temperature_anomaly(
     weather: Sequence[WeatherEvent],
     region: str,
+    month: int,
     settings: Settings | None = None,
 ) -> float:
-    """Mean ``temperature_c`` minus the per-region baseline (E-7, FR-4).
+    """Mean ``temperature_c`` minus the region's normal for ``month`` (E-7, FR-4).
+
+    ``month`` is the calendar month of the window, 1 for January through 12 for
+    December, taken by the caller from the window start so that every event in a
+    window is measured against the same normal whatever its own timestamp.
+    Measuring against a monthly normal rather than one annual scalar is what
+    keeps the anomaly meaningful in both configured sources: a July reading
+    compared to an annual average would report a large positive anomaly every
+    summer and a large negative one every winter, in any region with seasons.
 
     An empty weather set imputes to 0.0 (no anomaly signal from this window).
     """
     settings = settings if settings is not None else get_settings()
     if not weather:
         return 0.0
-    baseline = settings.region_baselines[region]
+    baseline = settings.region_monthly_baselines[region][month - 1]
     return _mean([event.temperature_c for event in weather]) - baseline
 
 

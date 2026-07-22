@@ -53,11 +53,32 @@ def test_one_record_per_region_per_window_with_expected_values() -> None:
     assert record.region == "EUR"
     assert record.window_start == datetime(2026, 7, 19, 12, 0, tzinfo=UTC)
     assert record.window_end == datetime(2026, 7, 19, 12, 30, tzinfo=UTC)
-    assert record.temperature_anomaly == pytest.approx(10.0)
+    # TS is in July, so the anomaly is against the EUR July normal of 21.1:
+    # mean 22.0 minus 21.1 = 0.9, which normalizes to 0.09 in the index.
+    assert record.temperature_anomaly == pytest.approx(0.9)
     assert record.dryness_index == pytest.approx(0.60)
     assert record.pollution_index == pytest.approx(0.575)
-    assert record.impact_index == pytest.approx(75.25)
+    assert record.impact_index == pytest.approx(38.85)
     assert record.confidence is Confidence.MEASURED
+
+
+def test_the_window_month_selects_the_normal() -> None:
+    """Identical readings in January and July produce different anomalies (E-7).
+
+    The engine takes the month from the window start, so this is the wiring
+    check: the same two EUR readings sit 0.9 above the July normal and 18.9
+    above the January one, and nothing about the events themselves changed.
+    """
+    january = datetime(2026, 1, 19, 12, 15, tzinfo=UTC)
+    july_records = compute_records([_weather("EUR", 20.0, 0.0), _weather("EUR", 24.0, 10.0)])
+    january_records = compute_records(
+        [
+            _weather("EUR", 20.0, 0.0, ts=january),
+            _weather("EUR", 24.0, 10.0, ts=january),
+        ]
+    )
+    assert july_records[0].temperature_anomaly == pytest.approx(22.0 - 21.1)
+    assert january_records[0].temperature_anomaly == pytest.approx(22.0 - 3.1)
 
 
 def test_records_are_ordered_by_region_then_window() -> None:

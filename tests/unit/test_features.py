@@ -41,14 +41,31 @@ def _satellite(
     )
 
 
-# The AT-3 fixed scenario. EUR baseline is 12.0 (config).
+# The AT-3 fixed scenario. TS is in July, so the EUR normal in play is the July
+# one, 21.1 (config region_monthly_baselines, index 6). The spec takes the month
+# from the window start, so these direct calls pass it explicitly.
+_JULY = TS.month
 _WEATHER = [_weather(20.0, 0.0), _weather(24.0, 10.0)]
 _SATELLITE = [_satellite(50.0, 0.0, 1.0), _satellite(30.0, 0.2, 2.0)]
 
 
-def test_temperature_anomaly_is_mean_minus_baseline() -> None:
-    # mean temp 22.0 minus EUR baseline 12.0.
-    assert temperature_anomaly(_WEATHER, "EUR") == pytest.approx(10.0)
+def test_temperature_anomaly_is_mean_minus_the_month_normal() -> None:
+    # mean temp 22.0 minus the EUR July normal 21.1.
+    assert temperature_anomaly(_WEATHER, "EUR", _JULY) == pytest.approx(0.9)
+
+
+def test_temperature_anomaly_follows_the_month_it_is_given() -> None:
+    """The same readings are a mild July but a very warm January (E-7).
+
+    This is the point of monthly normals: against one annual scalar, every
+    summer window in a seasonal region would report a large positive anomaly
+    purely because it is summer.
+    """
+    january = temperature_anomaly(_WEATHER, "EUR", 1)
+    july = temperature_anomaly(_WEATHER, "EUR", 7)
+    assert january == pytest.approx(22.0 - 3.1)
+    assert july == pytest.approx(22.0 - 21.1)
+    assert january > july
 
 
 def test_dryness_index_combines_rain_and_vegetation() -> None:
@@ -62,12 +79,13 @@ def test_pollution_index_combines_aerosol_and_cloud() -> None:
 
 
 def test_impact_index_matches_hand_computed_value_and_is_in_range() -> None:
-    anomaly = temperature_anomaly(_WEATHER, "EUR")
+    anomaly = temperature_anomaly(_WEATHER, "EUR", _JULY)
     dryness = dryness_index(_WEATHER, _SATELLITE)
     pollution = pollution_index(_SATELLITE)
     index = impact_index(anomaly, dryness, pollution)
-    # 0.4*1.0 + 0.3*0.60 + 0.3*0.575 = 0.7525 -> 75.25.
-    assert index == pytest.approx(75.25)
+    # anomaly 0.9 normalizes to 0.9/10 = 0.09, so
+    # 0.4*0.09 + 0.3*0.60 + 0.3*0.575 = 0.3885 -> 38.85.
+    assert index == pytest.approx(38.85)
     assert 0.0 <= index <= 100.0
 
 
@@ -93,4 +111,4 @@ def test_pollution_without_satellite_imputes_zero() -> None:
 
 
 def test_temperature_anomaly_without_weather_imputes_zero() -> None:
-    assert temperature_anomaly([], "EUR") == pytest.approx(0.0)
+    assert temperature_anomaly([], "EUR", _JULY) == pytest.approx(0.0)

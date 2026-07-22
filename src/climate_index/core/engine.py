@@ -62,7 +62,9 @@ def compute_records(
     records: list[ClimateIndexRecord] = []
     for key, bucket in sorted(buckets.items(), key=lambda item: (item[0][0], item[0][1])):
         region, window_start, window_end = key
-        anomaly = temperature_anomaly(bucket.weather, region, settings)
+        # The window's own month, not each event's, so every event in a window is
+        # measured against one normal (E-7).
+        anomaly = temperature_anomaly(bucket.weather, region, window_start.month, settings)
         dryness = dryness_index(bucket.weather, bucket.satellite, settings)
         pollution = pollution_index(bucket.satellite, settings)
         records.append(

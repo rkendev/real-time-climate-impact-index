@@ -25,7 +25,6 @@ def test_defaults_are_the_single_authority() -> None:
         "pollution_index",
     }
     assert set(settings.label_thresholds) == {"low_max", "medium_max"}
-    assert settings.region_baselines["EUR"] == 12.0
 
 
 def test_display_constants_are_the_single_authority(  # UC-5, NFR-DQ2
