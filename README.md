@@ -5,7 +5,7 @@ A streaming data pipeline that turns a live feed of weather and satellite readin
 Live demo: https://climate-index.85-215-55-99.sslip.io
 
 Github repo: github.com/rkendev/real-time-climate-impact-index
-a
+
 ## What it is
 
 Most streaming demos show a number moving on a chart and ask you to trust it. This project takes the opposite stance: every index value is paired with a confidence label that is computed from how much clean data actually backed that window, and readings that fail validation are quarantined rather than silently averaged in. If the evidence for a region is thin, the dashboard says so instead of pretending the number is solid.
@@ -13,6 +13,28 @@ Most streaming demos show a number moving on a chart and ask you to trust it. Th
 The pipeline simulates weather and satellite sources, publishes them to a single-node Kafka broker, runs a deterministic validation-and-quarantine gate, aggregates the survivors into event-time tumbling windows keyed by a natural identity so a replay produces the same row rather than a duplicate, computes the index and its confidence, and writes the result to a store that a read-only Streamlit dashboard reads back.
 
 The distinctive engineering choice is portability. The core processing code has no cloud SDK in it at all. A single configuration flag selects the storage backend: locally the aggregates land in DuckDB and the raw feed in the local filesystem; on AWS the same aggregates land in an Apache Iceberg table cataloged in Glue on S3, the serving copy lands in DynamoDB, and the raw feed lands in plain S3. The processor does not know or care which one is active. That is enforced, not aspirational: a test invariant fails the build if any cloud SDK import appears under the core package.
+
+## Architecture
+
+```mermaid
+flowchart TB
+    W[Weather readings] --> P[Producer]
+    S[Satellite readings] --> P
+    P -->|events| K[Kafka broker<br/>single-node KRaft]
+    K --> V{Validate and<br/>quarantine}
+    V -->|invalid| Q[Quarantine]
+    V -->|valid| WIN[Event-time<br/>tumbling windows]
+    WIN --> C[Compute index<br/>and confidence grade]
+    C --> A[Store adapter<br/>selected by one config flag]
+    A -->|local| DD[DuckDB aggregates<br/>and local raw files]
+    A -->|aws| ICE[S3 and Apache Iceberg via Glue<br/>aggregate of record]
+    A -->|aws| DYN[DynamoDB<br/>serving store]
+    A -->|aws| RAW[S3<br/>raw feed]
+    DD --> DASH[Read-only Streamlit dashboard]
+    DYN --> DASH
+```
+
+Simulated sources publish to Kafka; a deterministic gate validates each event or quarantines it; the survivors are bucketed into event-time windows and reduced to an index with a confidence grade; and a single config flag routes the result to DuckDB locally or to S3 with Apache Iceberg via Glue plus DynamoDB on AWS, all behind the same interface, with the read-only dashboard reading the local aggregates or the AWS serving store.
 
 ## How it is built
 
@@ -75,11 +97,6 @@ A hosted instance of the local pipeline runs continuously at [climate-index.85-2
 The AWS path is the same processing code with the storage backend flag flipped. Infrastructure is two-layer Terraform: a persistent layer that rests at near-zero cost (buckets, DynamoDB, Glue database, IAM, the budget alarm, and an ECR repository) and an ephemeral layer (the VPC, security group, and a single Graviton instance) that exists only for a demo. The image is delivered through ECR and the box pulls it with its instance role, so no secret, credential, or token ever lands on the instance or in any tracked file.
 
 Because the persistent layer is left standing, reproducing the whole cloud demo is a single ephemeral apply, and the runbook records the exact one-command sequence along with the recorded spend. The pre-deploy gate refuses to proceed unless the offline checks are green first.
-
-<!-- ARCHITECTURE DIAGRAM SLOT: add the architecture diagram here showing
-sources -> Kafka -> validate/quarantine -> windowing -> index/confidence ->
-store adapter (DuckDB | S3+Iceberg/Glue + DynamoDB) -> dashboard.
-Suggested path: docs/img/architecture.png -->
 
 ## Reading the repo
 
