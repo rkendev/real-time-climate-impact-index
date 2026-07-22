@@ -14,6 +14,7 @@ These hold in every phase. They are stated in full in `adr/0004-nonfunctional-in
 - INV-3: Every record entering the aggregate store passed the deterministic validation gate; invalid input is quarantined, never silently dropped or written.
 - INV-4: The core package imports no cloud-vendor SDK; vendor specifics live behind adapters.
 - INV-5: One source of truth for dependency versions; a check fails the build on disagreement.
+- INV-6: No network I/O in the core package; every external data source sits behind a source adapter selected by config (ADR-0007).
 
 ## Acceptance tests
 
@@ -30,6 +31,7 @@ Acceptance tests map to use cases and requirements. A phase is done when its acc
 - AT-9 (UC-7, NFR-C1): the cloud deploy command refuses when the local smoke marker is absent.
 - AT-10 (NFR-PT1, INV-4): no cloud-vendor SDK import appears under the core package. With one cloud, this guards anti-lock-in hygiene and keeps the core unit-testable without cloud credentials, rather than proving a second-cloud move.
 - AT-11 (NFR-C2, ADR-0005): after tearing down the ephemeral compute layer, a tag-based audit finds no billable resource (running instance, NAT gateway, attached or unattached public IPv4 address, load balancer) still carrying the project tag.
+- AT-12 (UC-1, FR-1, ADR-0007): with `CII_SOURCE_BACKEND=real` and the network available, one producer tick emits at least one weather and one satellite envelope per configured region, all of which pass the unchanged validation gate, and the resulting window rows carry grades produced by the committed grader. A live check run by hand against the real provider, deliberately not a unit test: no network enters the suite, and the offline adapter tests drive `httpx.MockTransport` instead.
 
 ## Phase 1: local, single machine
 
