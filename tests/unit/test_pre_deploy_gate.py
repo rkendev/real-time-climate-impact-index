@@ -18,7 +18,15 @@ GATE = REPO_ROOT / "scripts" / "pre_deploy_gate.sh"
 
 
 def _run_gate(marker: Path, cwd: Path) -> subprocess.CompletedProcess[str]:
-    env = {**os.environ, "CII_SMOKE_MARKER": str(marker)}
+    # The gate runs terraform init against the real infra/ tree, and the AWS
+    # provider validates whatever credentials it finds in the environment. The
+    # AWS adapter tests set fake session credentials for the whole pytest
+    # session (tests/aws/conftest.py, session-scoped and autouse), so in a
+    # full-suite run terraform would be handed a token STS rejects and init
+    # would fail for a reason that has nothing to do with this gate. The gate
+    # contacts no AWS and needs no credential, so the subprocess gets none.
+    env = {key: value for key, value in os.environ.items() if not key.startswith("AWS_")}
+    env["CII_SMOKE_MARKER"] = str(marker)
     return subprocess.run(
         ["bash", str(GATE)],
         cwd=cwd,
