@@ -17,6 +17,14 @@ dynamo_table             = "climate-index-serving"
 ecr_repository_url = "000000000000.dkr.ecr.us-east-1.amazonaws.com/climate-index-app"
 image_tag          = "v0-0-0"
 
+# Pin the subnet's availability zone. Not optional in practice: left unset, AWS
+# picks a zone, and not every zone offers the Graviton instance type (in us-east-1,
+# us-east-1e does not offer t4g), so an apply can fail at RunInstances after the
+# network is already built. Check a candidate zone with:
+#   aws ec2 describe-instance-type-offerings --location-type availability-zone \
+#     --filters Name=instance-type,Values=t4g.medium --query 'InstanceTypeOfferings[].Location'
+availability_zone = "us-east-1a"
+
 # Optional overrides (defaults shown):
 # instance_type          = "t4g.medium"
 # dashboard_port         = 8501

@@ -9,11 +9,21 @@ resource "aws_vpc" "this" {
   enable_dns_hostnames = true
 }
 
-# No availability_zone is set so no aws_availability_zones data source is needed;
-# AWS assigns one at apply, keeping plan offline.
+# The availability zone is an input rather than an aws_availability_zones data
+# source, so plan stays offline and credential-free (the same reason ami_id is a
+# variable). Left null, AWS assigns a zone at apply; that is not safe here,
+# because the Graviton instance types this stack runs are not offered in every
+# zone of a region. An apply that landed on such a zone failed at RunInstances
+# with "Unsupported: your requested instance type is not supported in your
+# requested Availability Zone", after the subnet was already created. Pinning the
+# zone in tfvars makes placement deterministic across re-applies rather than a
+# one-in-six coin flip. Confirm a candidate zone offers the type with:
+#   aws ec2 describe-instance-type-offerings --location-type availability-zone \
+#     --filters Name=instance-type,Values=<instance_type> --query 'InstanceTypeOfferings[].Location'
 resource "aws_subnet" "public" {
   vpc_id                  = aws_vpc.this.id
   cidr_block              = var.subnet_cidr
+  availability_zone       = var.availability_zone
   map_public_ip_on_launch = true
 }
 

@@ -50,6 +50,12 @@ variable "subnet_cidr" {
   default     = "10.0.1.0/24"
 }
 
+variable "availability_zone" {
+  description = "Availability zone for the public subnet, for example us-east-1a. Null lets AWS choose, which can land on a zone that does not offer the Graviton instance type; pin it in tfvars so placement is deterministic. Kept a variable (not a data source) so plan stays offline. No default here, because a zone name is region-specific and this stack takes its region as an input."
+  type        = string
+  default     = null
+}
+
 variable "processor_role_name" {
   description = "Name of the processor IAM role from the persistent stack output; the instance profile assumes it."
   type        = string
