@@ -175,6 +175,78 @@ untouched. A backup is left at `/etc/caddy/Caddyfile.bak.climate-index`, and
 after a crash and after a reboot with no human. The timer is enabled too, and fires
 two minutes after boot.
 
+## AT-12: the real source, verified live (2026-07-22)
+
+The acceptance test for the real event source (`30_plan.md` AT-12, ADR-0007) is a
+hand-run check against the live provider, deliberately not part of the suite: no
+network enters the test run, and the adapter's offline tests drive
+`httpx.MockTransport` instead. Recorded here so the result is auditable without
+rerunning it.
+
+Command (the two endpoints and the broker address come from the environment,
+never from source, INV-1):
+
+```bash
+CII_SOURCE_BACKEND=real \
+CII_OPEN_METEO_WEATHER_URL=https://api.open-meteo.com/v1/forecast \
+CII_OPEN_METEO_AIR_QUALITY_URL=https://air-quality-api.open-meteo.com/v1/air-quality \
+CII_TRANSPORT_BOOTSTRAP_SERVERS=localhost:9092 \
+PYTHONPATH=src .venv/bin/python -m climate_index.producer   # one tick, then the processor pass
+```
+
+**Clean run.** Four regions, three cities each, two streams per city: 24 events,
+six per region, nothing unavailable, nothing quarantined, four window rows graded
+by the committed grader.
+
+```
+{"component":"at12","emitted":24,"event":"source_tick_complete","regions":4,"unavailable":0}
+{"component":"at12","event":"heartbeat","published":24,"regions":4,"tick_events":24}
+{"component":"at12","event":"producer_run_complete","published":24,"ticks":1}
+
+per-region published counts (published=24): EUR 6, NAM 6, AFR 6, ASI 6
+
+{"component":"at12","consumed":24,"event":"processor_run_complete","forwarded":24,"quarantined":0,"records":4}
+
+EUR 2026-07-22 13:00 .. 13:30  index=44.99 anomaly= 2.97 dry=0.605 poll=0.499 confidence=MEASURED
+NAM 2026-07-22 13:00 .. 13:30  index=31.37 anomaly=-3.13 dry=0.605 poll=0.441 confidence=MEASURED
+AFR 2026-07-22 13:00 .. 13:30  index=56.87 anomaly= 7.07 dry=0.643 poll=0.311 confidence=MEASURED
+ASI 2026-07-22 13:00 .. 13:30  index=37.82 anomaly= 1.90 dry=0.598 poll=0.410 confidence=MEASURED
+```
+
+**Induced-gap run.** The same command with the air quality endpoint pointed at a
+dead host (`air-quality-api.open-meteo.invalid`) and a five second timeout. This
+is the run that matters: it shows the confidence grade is genuine rather than
+arranged. Twelve counted skips, one per city, half the events, and the committed
+grader drops every region to INFERRED on its own. Nothing sets a grade, and no
+missing reading is substituted or retried.
+
+```
+{"city":"Amsterdam","event":"source_reading_unavailable","reason":"transport_error","region":"EUR","stream":"satellite"}
+{"city":"Berlin",   "event":"source_reading_unavailable","reason":"transport_error","region":"EUR","stream":"satellite"}
+...one per city, twelve in all...
+{"component":"at12","emitted":12,"event":"source_tick_complete","regions":4,"unavailable":12}
+{"component":"at12","event":"producer_run_complete","published":12,"ticks":1}
+
+per-region published counts (published=12): EUR 3, NAM 3, AFR 3, ASI 3
+
+{"component":"at12","consumed":12,"event":"processor_run_complete","forwarded":12,"quarantined":0,"records":4}
+
+EUR 2026-07-22 13:00 .. 13:30  index=41.87 anomaly= 2.97 dry=1.000 poll=0.000 confidence=INFERRED
+NAM 2026-07-22 13:00 .. 13:30  index=30.00 anomaly=-3.13 dry=1.000 poll=0.000 confidence=INFERRED
+AFR 2026-07-22 13:00 .. 13:30  index=57.97 anomaly= 7.07 dry=0.990 poll=0.000 confidence=INFERRED
+ASI 2026-07-22 13:00 .. 13:30  index=37.60 anomaly= 1.90 dry=1.000 poll=0.000 confidence=INFERRED
+```
+
+Note the temperature anomaly is identical across both runs (EUR +2.97, NAM
+-3.13): the weather stream was unaffected, only the pollution stream went dark.
+That is the per-stream containment the one-request-per-city design buys.
+
+**Demo replay check.** Two consecutive `make vps-demo-refresh` runs each fetched
+and republished 912 events (4 regions x 3 cities x 2 streams x 38 hours) and the
+published snapshot held **152 rows both times, not 304**. Re-publishing an hour
+lands on the same natural key rather than duplicating it, so the live demo now
+exercises FR-6 / NFR-R1 continuously instead of only inside AT-5.
+
 ## Notes learned on the run (folded into the code)
 
 - Real applies pass `TF_VAR_offline_plan=false` so the provider resolves the
