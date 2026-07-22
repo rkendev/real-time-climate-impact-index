@@ -3,16 +3,22 @@
 A Streamlit page with a region selector, a time series of the impact index over
 recent windows, the current value, its verbal label, and its confidence grade,
 wrapped in enough plain language that a first-time viewer can read it unaided:
-what the index is and which way it points, that the feed is simulated, when the
-served snapshot last moved and how often it refreshes, what each confidence tier
-means, and where the label bands fall.
+what the index is and which way it points, which source the feed is actually
+coming from, when the served snapshot last moved and how often it refreshes,
+what each confidence tier means, and where the label bands fall.
 
 Every one of those definitions is read from
 :class:`~climate_index.config.Settings`, which holds them as the single authority
 (INV-1). The page states nothing of its own: the band cutoffs come from
 ``label_thresholds``, the tier glosses from ``confidence_tier_glosses``, the strip
-colours from ``confidence_tier_colors``, and each window's grade is the value the
-pipeline stored on that row. Nothing here sets or adjusts a grade.
+colours from ``confidence_tier_colors``, the feed notice is whichever of the two
+configured notices matches ``source_backend``, and each window's grade is the
+value the pipeline stored on that row. Nothing here sets or adjusts a grade.
+
+Provenance claims are made only where they are true. The feed notice names the
+source actually configured, and the provider attribution appears only when the
+real source is live, because attributing simulated numbers to a data provider
+would assert a provenance the page does not have (UC-5, ADR-0007).
 
 Window times are written as UTC clock labels on the server (``as_utc`` is the one
 place the page handles zones, and ``window_axis_time_format`` holds the pattern),
@@ -132,6 +138,37 @@ def tier_gloss(confidence: str | None, settings: Settings) -> str:
     if confidence is None:
         return ""
     return settings.confidence_tier_glosses.get(confidence, "")
+
+
+def is_real_feed(settings: Settings) -> bool:
+    """Whether the real source is the one configured.
+
+    Anything unrecognised reads as not-real, because understating what the feed
+    is can only disappoint a viewer, while overstating it misleads one.
+    """
+    return settings.source_backend == "real"
+
+
+def feed_notice(settings: Settings) -> str:
+    """The notice matching the source actually configured (UC-5, ADR-0007).
+
+    Selecting, not composing: both notices are written in config, which holds
+    them as their single authority, and this picks the one whose backend is in
+    force. The page can therefore never claim a provenance the pipeline is not
+    running, in either direction.
+    """
+    return settings.real_feed_notice if is_real_feed(settings) else settings.simulated_feed_notice
+
+
+def attribution_line(settings: Settings) -> str:
+    """The provider attribution, or an empty string when no provider data is used.
+
+    Attribution belongs to data actually present. Under the simulated source no
+    provider reading has been fetched, so naming one would assert a provenance
+    the page does not have, which is the exact failure this whole change exists
+    to remove. It appears only when the real source is live.
+    """
+    return settings.source_attribution if is_real_feed(settings) else ""
 
 
 def as_utc(moment: datetime) -> datetime:
@@ -261,7 +298,7 @@ def render(store: ReadOnlyAggregateStore, settings: Settings) -> None:
     """Render the read-only page for the selected region."""
     st.title("Real-Time Climate Impact Index")
     st.write(settings.index_summary)
-    st.caption(settings.simulated_feed_notice)
+    st.caption(feed_notice(settings))
 
     regions = list(settings.region_list)
     region = st.selectbox("Region", regions)
@@ -300,6 +337,9 @@ def render(store: ReadOnlyAggregateStore, settings: Settings) -> None:
 
     with st.expander("About / how it works"):
         st.write(settings.pipeline_summary)
+        attribution = attribution_line(settings)
+        if attribution:
+            st.caption(attribution)
         url = settings.source_repository_url
         st.markdown(f"Source code and documentation: [{url}]({url})")
 

@@ -324,8 +324,9 @@ def _render_and_record(
     module: object,
     db_path: Path,
     monkeypatch: pytest.MonkeyPatch,
+    settings: Settings | None = None,
 ) -> _Recorder:
-    settings = Settings(_env_file=None)
+    settings = settings if settings is not None else Settings(_env_file=None)
     recorder = _Recorder([])
     monkeypatch.setattr(module, "st", recorder)
     reader = DuckDBReadOnlyAggregateStore(db_path)
@@ -345,9 +346,12 @@ def test_page_explains_the_index_the_feed_the_tiers_and_the_bands(
 
     page = _render_and_record(module, db_path, monkeypatch).text()
 
-    # What the index is, its scale, and its direction, plus the simulated feed.
+    # What the index is, its scale, and its direction, plus the active feed.
     assert settings.index_summary in page
     assert settings.simulated_feed_notice in page
+    # No provider is credited while the feed is simulated: no provider data is
+    # in play, so naming one would assert a provenance the page does not have.
+    assert settings.source_attribution not in page
     # When it last moved and how often it refreshes.
     assert "2026-07-19 12:00 UTC" in page
     assert settings.demo_refresh_interval in page
@@ -361,6 +365,57 @@ def test_page_explains_the_index_the_feed_the_tiers_and_the_bands(
     # The pipeline description and the link back to the source.
     assert settings.pipeline_summary in page
     assert settings.source_repository_url in page
+
+
+def test_the_page_states_the_source_that_is_actually_configured(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The notice follows source_backend, so the page cannot misstate provenance.
+
+    This is the whole point of the change: the feed used to be described by a
+    constant that was true only by coincidence of configuration.
+    """
+    db_path = _seed_store(tmp_path)
+    module = _load_dashboard_module()
+
+    real = Settings(
+        _env_file=None,
+        source_backend="real",
+        open_meteo_weather_url="https://weather.invalid/v1/forecast",
+        open_meteo_air_quality_url="https://air.invalid/v1/air-quality",
+    )
+    page = _render_and_record(module, db_path, monkeypatch, settings=real).text()
+
+    assert real.real_feed_notice in page
+    assert real.simulated_feed_notice not in page
+    # The provider is credited exactly when its data is what is on the page.
+    assert real.source_attribution in page
+    # It says readings, not observations: these products are model analyses.
+    assert "observations" not in real.real_feed_notice
+
+
+def test_the_notice_and_attribution_helpers_select_rather_than_compose() -> None:
+    module = _load_dashboard_module()
+    simulated = Settings(_env_file=None)
+    real = Settings(
+        _env_file=None,
+        source_backend="real",
+        open_meteo_weather_url="https://weather.invalid/v1/forecast",
+        open_meteo_air_quality_url="https://air.invalid/v1/air-quality",
+    )
+
+    feed_notice = module.feed_notice  # type: ignore[attr-defined]
+    attribution_line = module.attribution_line  # type: ignore[attr-defined]
+
+    assert feed_notice(simulated) == simulated.simulated_feed_notice
+    assert feed_notice(real) == real.real_feed_notice
+    assert attribution_line(simulated) == ""
+    assert attribution_line(real) == real.source_attribution
+
+    # An unrecognised backend understates rather than overstates the feed.
+    unknown = Settings(_env_file=None, source_backend="teleport")
+    assert feed_notice(unknown) == unknown.simulated_feed_notice
+    assert attribution_line(unknown) == ""
 
 
 def _chart_rows(spec: dict[str, object]) -> list[dict[str, object]]:
