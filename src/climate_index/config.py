@@ -20,8 +20,27 @@ from __future__ import annotations
 from functools import lru_cache
 from pathlib import Path
 
-from pydantic import Field
+from pydantic import BaseModel, Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+# Calendar months in a year. The monthly reference tables below carry exactly
+# this many entries per region, index 0 being January (E-7).
+MONTHS_IN_YEAR = 12
+
+
+class CityLocation(BaseModel):
+    """One representative city for a region: a name and its coordinates (E-7).
+
+    Structural reference data, like the baselines, not a connection detail: a
+    latitude and longitude are neither an endpoint nor a secret (INV-1). The
+    real event source fetches one reading per city per stream, so a region's
+    cities are its sampling points and a window normally holds several events
+    per region (UC-1, ADR-0007).
+    """
+
+    name: str
+    latitude: float = Field(ge=-90, le=90)
+    longitude: float = Field(ge=-180, le=180)
 
 
 class Settings(BaseSettings):
@@ -53,6 +72,78 @@ class Settings(BaseSettings):
             "NAM": 14.0,
             "AFR": 24.0,
             "ASI": 20.0,
+        }
+    )
+
+    # E-7 representative cities per region: the sampling points the real event
+    # source fetches (UC-1, ADR-0007). Three per region, so one city failing to
+    # answer thins a window rather than emptying it, and the sparsity and
+    # composition rules keep doing real work. Adding a city is configuration,
+    # not code (NFR-S1). Coordinates are structural reference data, like the
+    # baselines below; neither an endpoint nor a secret (INV-1).
+    region_locations: dict[str, list[CityLocation]] = Field(
+        default_factory=lambda: {
+            "EUR": [
+                CityLocation(name="Amsterdam", latitude=52.3676, longitude=4.9041),
+                CityLocation(name="Berlin", latitude=52.5200, longitude=13.4050),
+                CityLocation(name="Madrid", latitude=40.4168, longitude=-3.7038),
+            ],
+            "NAM": [
+                CityLocation(name="New York", latitude=40.7128, longitude=-74.0060),
+                CityLocation(name="Chicago", latitude=41.8781, longitude=-87.6298),
+                CityLocation(name="Los Angeles", latitude=34.0522, longitude=-118.2437),
+            ],
+            "AFR": [
+                CityLocation(name="Lagos", latitude=6.5244, longitude=3.3792),
+                CityLocation(name="Nairobi", latitude=-1.2921, longitude=36.8219),
+                CityLocation(name="Cairo", latitude=30.0444, longitude=31.2357),
+            ],
+            "ASI": [
+                CityLocation(name="Tokyo", latitude=35.6762, longitude=139.6503),
+                CityLocation(name="Delhi", latitude=28.6139, longitude=77.2090),
+                CityLocation(name="Jakarta", latitude=-6.2088, longitude=106.8456),
+            ],
+        }
+    )
+
+    # E-7 per-region monthly temperature normals, degrees Celsius, one value per
+    # calendar month with January first. These replace the single annual scalar
+    # above: the anomaly for a window is its mean temperature minus the normal
+    # for the window's own month, so a July window is measured against July.
+    #
+    # Derived, not invented, by exactly the recipe spec E-7 records: for each
+    # region, the mean of its three cities above, where a city's monthly value is
+    # the mean of ERA5 daily mean temperature over 1991-01-01 to 2020-12-31 from
+    # the Open-Meteo archive endpoint. scripts/derive_climatology.py regenerates
+    # them; the spec records the parameters so the numbers are reproducible
+    # without it. One mechanism serves both configured sources (UC-1).
+    region_monthly_baselines: dict[str, list[float]] = Field(
+        default_factory=lambda: {
+            "EUR": [3.1, 3.9, 6.7, 10.3, 14.5, 18.4, 21.1, 20.9, 16.9, 12.0, 7.1, 4.0],
+            "NAM": [2.4, 3.1, 6.5, 11.2, 16.1, 20.9, 23.9, 23.7, 20.8, 15.2, 9.4, 4.5],
+            "AFR": [20.1, 21.0, 22.1, 22.9, 23.7, 23.9, 23.7, 23.7, 23.7, 23.1, 21.6, 20.3],
+            "ASI": [14.3, 15.7, 18.8, 22.7, 25.7, 26.9, 27.1, 27.2, 25.9, 23.2, 19.5, 15.9],
+        }
+    )
+
+    # E-3 per-region monthly vegetation reference, one value per calendar month,
+    # January first. Used by the real event source only, which has no live
+    # per-coordinate vegetation feed available at this integration cost
+    # (ADR-0007). Unlike the temperature normals above these are NOT derived
+    # from a dataset: they are approximate published seasonal climatology,
+    # inside the E-3 schema bound of minus one to one, and the specification,
+    # the ADR, and the dashboard notice all state that they are a configured
+    # reference and not a measurement. Nothing may present them as observed.
+    region_monthly_vegetation: dict[str, list[float]] = Field(
+        default_factory=lambda: {
+            # Temperate, strong growing season.
+            "EUR": [0.26, 0.27, 0.33, 0.44, 0.54, 0.58, 0.58, 0.55, 0.48, 0.38, 0.30, 0.26],
+            # Temperate with an arid member, so a slightly lower summer peak.
+            "NAM": [0.23, 0.24, 0.30, 0.42, 0.53, 0.58, 0.58, 0.56, 0.48, 0.37, 0.28, 0.24],
+            # Mixed tropical and arid, so the weakest seasonal swing of the four.
+            "AFR": [0.36, 0.36, 0.38, 0.42, 0.44, 0.43, 0.41, 0.40, 0.41, 0.43, 0.41, 0.38],
+            # Monsoon driven, so the peak lags into late summer.
+            "ASI": [0.34, 0.34, 0.37, 0.43, 0.50, 0.56, 0.61, 0.62, 0.58, 0.50, 0.42, 0.36],
         }
     )
 
@@ -120,9 +211,30 @@ class Settings(BaseSettings):
     # there: an axis titled UTC would then show the viewer's own clock. A 24 hour
     # pattern, so the newest tick states the same instant as the freshness line.
     window_axis_time_format: str = "%H:%M"
+    # The two mode-accurate feed notices (UC-5). The dashboard renders whichever
+    # one matches ``source_backend``; it selects, it does not compose. Keeping
+    # both here means the page can never state a provenance the pipeline is not
+    # actually running.
     simulated_feed_notice: str = (
         "The feed is simulated: weather and satellite readings are generated by the producer, "
         "not collected from real world observations."
+    )
+    # Deliberately says "readings" and not "observations": the weather and air
+    # quality products behind the real source are model analyses, not station
+    # measurements, and this page does not overclaim. It also states the
+    # vegetation term honestly (E-3) and states what a missing reading does,
+    # because that is the whole reason the confidence grade is worth reading.
+    real_feed_notice: str = (
+        "The feed is real: hourly weather and air quality readings for representative cities in "
+        "each region, fetched from Open-Meteo and republished on the refresh cadence into hourly "
+        "windows. The vegetation term is a monthly reference value from configuration, not a "
+        "reading. A reading that fails to arrive is left out rather than filled in, which is what "
+        "lowers a window's confidence grade."
+    )
+    # Attribution the real source's terms require, rendered in the about panel.
+    source_attribution: str = (
+        "Weather and air quality data by Open-Meteo. Atmospheric composition from the "
+        "CAMS ENSEMBLE data provider."
     )
 
     # NFR-DQ2 confidence tiers and what drives each, in descending order of
@@ -178,9 +290,30 @@ class Settings(BaseSettings):
     # NFR-O1 log verbosity for the structured logger.
     log_level: str = "INFO"
 
+    # Which event source the composition root builds (see
+    # climate_index.source_factory), the same shape as aggregate_backend below.
+    # "simulated" is the default, so with nothing set the producer, the smoke
+    # checks, and the local quickstart stay offline and deterministic exactly as
+    # before. "real" builds the Open-Meteo fetch adapter (UC-1, ADR-0007). A
+    # backend name, not an endpoint or a secret.
+    source_backend: str = "simulated"
+
     # Connection details: no endpoint or secret literal (INV-1). Populated from
     # the environment when a concrete transport/store adapter runs (Phase 2).
     transport_bootstrap_servers: str | None = None
+
+    # Real event source endpoints (ADR-0007). None until set per environment,
+    # exactly like transport_bootstrap_servers above: no URL literal appears in
+    # source (INV-1), and the example values live in .env.example and in the
+    # git-ignored demo environment only. The real source refuses to run rather
+    # than guessing when either is unset.
+    open_meteo_weather_url: str | None = None
+    open_meteo_air_quality_url: str | None = None
+
+    # How long a single source fetch may take before it counts as a miss. A miss
+    # emits no event and is logged and counted; it is never retried in a loop and
+    # never replaced with a substituted value (UC-1 no-fabrication rule).
+    source_fetch_timeout_s: float = 10.0
 
     # When true, the consumer entry point drains the broker once and exits instead
     # of looping. The container consumer role loops by default (a live service);
@@ -238,6 +371,36 @@ class Settings(BaseSettings):
     def region_list(self) -> tuple[str, ...]:
         """The configured regions as an ordered tuple of non-empty codes."""
         return tuple(code.strip() for code in self.regions.split(",") if code.strip())
+
+    @model_validator(mode="after")
+    def _check_monthly_tables(self) -> Settings:
+        """Every monthly reference row is twelve long and inside its schema bound.
+
+        This checks the shape of the tables, not that they cover ``region_list``.
+        Coverage is deliberately left to the point of use: a region set can be
+        overridden from the environment for a test or a narrow deployment
+        without having to restate every reference table, and the real event
+        source refuses to start with a named error when a region it is asked to
+        fetch has no locations. A silently short row, by contrast, would produce
+        a wrong anomaly rather than an error, so it is caught here.
+        """
+        for name, table in (
+            ("region_monthly_baselines", self.region_monthly_baselines),
+            ("region_monthly_vegetation", self.region_monthly_vegetation),
+        ):
+            for region, values in table.items():
+                if len(values) != MONTHS_IN_YEAR:
+                    raise ValueError(
+                        f"{name}[{region!r}] must hold {MONTHS_IN_YEAR} monthly values, "
+                        f"got {len(values)}"
+                    )
+        for region, values in self.region_monthly_vegetation.items():
+            if not all(-1.0 <= value <= 1.0 for value in values):
+                raise ValueError(
+                    f"region_monthly_vegetation[{region!r}] holds a value outside the "
+                    "E-3 bound of minus one to one"
+                )
+        return self
 
 
 @lru_cache(maxsize=1)
