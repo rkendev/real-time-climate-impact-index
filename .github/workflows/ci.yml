@@ -1,0 +1,103 @@
+# Continuous integration (ADR-0008).
+#
+# Two jobs, both required. The checks job runs the whole offline chain; the
+# container smoke runs the pipeline over a live Kafka broker in Docker. Every
+# step invokes a repository make target, so what CI runs and what an operator
+# runs cannot drift apart.
+#
+# Zero secrets, zero spend, no deploy. Nothing here calls AWS, applies Terraform,
+# pushes an image, or cuts a release.
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    # Weekly drift run, Mondays 06:17 UTC. A finished repository gets no pushes,
+    # and a dormant one is where toolchain and dependency drift accumulates
+    # unseen: a Terraform release once changed credential validation under a
+    # configuration that had not changed, and only a hand-run caught it. Off the
+    # hour on purpose, because jobs scheduled on the hour queue behind everyone
+    # else's. Note that GitHub disables a schedule after roughly 60 days of
+    # repository inactivity, which is the state this run exists to cover; the
+    # manual trigger below is how a quiet workflow is re-run and re-enabled.
+    - cron: "17 6 * * 1"
+  workflow_dispatch:
+
+# No secret, no cloud credential, no write scope. The only token in play is the
+# default GITHUB_TOKEN, read-only.
+permissions:
+  contents: read
+
+# A superseded run on the same ref is cancelled rather than left burning minutes.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # Timeouts derive from a measured fresh-clone chain of about six to seven
+  # minutes (pinned installs 55s, pre-commit hook environments 12s, cold mypy
+  # 69s, the full suite 147s including three Terraform provider downloads),
+  # doubled for runner variance. The point is that a hung broker or a stuck moto
+  # server dies in minutes instead of running against the platform default.
+  #
+  # Actions are pinned to full commit SHAs, not tags: a tag can be moved to point
+  # at new code, a commit SHA cannot. The runner image is pinned for the same
+  # reason a floating label is an undeclared input.
+  checks:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          # The 3.12 series is what the repository declares (Makefile, ruff,
+          # mypy, Dockerfile); no file declares a patch. The patch floats on
+          # purpose, because catching a bad new patch release is one of the two
+          # drift classes the weekly run exists for.
+          python-version: "3.12"
+
+      - uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4.0.1
+        with:
+          # The version proven on the box during the paid run. The offline gate
+          # tests shell out to terraform, so the version is part of what is under
+          # test and an upgrade should be a deliberate commit.
+          terraform_version: "1.14.8"
+          # The wrapper reroutes terraform through a shim; the gate scripts read
+          # its exit code and output directly, so install the real binary.
+          terraform_wrapper: false
+
+      # Creates the venv, asserts the interpreter, installs the two pinned
+      # requirements files, wires the pre-commit shim, and runs the hygiene gate.
+      - run: make bootstrap
+
+      - run: make lint
+
+      - run: make type-check
+
+      - run: make verify-versions
+
+      - run: make hygiene
+
+      # The whole suite, including the moto-backed AWS adapter tests and the
+      # Terraform-dependent gate tests. No credential and no spend: moto serves
+      # AWS on localhost, and terraform only reaches the public provider registry.
+      - run: make test
+
+  # Its own job on purpose. It is the only work that needs a container runtime
+  # and a broker, it is the slowest, and its failure modes (image build, broker
+  # health, drain timing) have nothing to do with the offline chain. Isolated,
+  # a failure is legible and attributable at a glance.
+  container-smoke:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      # Builds the app image for the runner architecture, starts single-node
+      # Kafka in KRaft mode, and drives producer to consumer to store to
+      # dashboard on the local DuckDB backend. Needs no Python on the runner,
+      # since everything it runs is in containers.
+      - run: make container-smoke
