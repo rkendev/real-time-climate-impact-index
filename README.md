@@ -46,7 +46,9 @@ The project is spec-driven. A single specification document is the source of tru
 
 The build ran in two gated phases. Phase 1 stood the whole pipeline up locally on a single machine with DuckDB, provable end to end with no cloud account involved. Phase 2 added the AWS adapters behind the existing storage interfaces, wrote the infrastructure as two-layer Terraform, and then crossed a deliberate spend boundary exactly once to prove the cloud path on real services under a hard cost ceiling.
 
-Correctness is checked offline before any money is spent. The AWS store adapters are tested against moto so the S3, Iceberg, DynamoDB, and Glue code paths are exercised with no live account and no charge. The suite runs 203 tests green with 2 skipped, under strict mypy on the whole source tree, with lint and a set of build-hygiene gates that check things like a single consistent set of dependency pins and the absence of secrets in tracked files. Terraform is formatted, validated, and planned entirely offline with no credentials.
+Correctness is checked offline before any money is spent. The AWS store adapters are tested against moto so the S3, Iceberg, DynamoDB, and Glue code paths are exercised with no live account and no charge. The suite runs 253 tests green with 2 skipped, under strict mypy on the whole source tree, with lint and a set of build-hygiene gates that check things like a single consistent set of dependency pins and the absence of secrets in tracked files. Terraform is formatted, validated, and planned entirely offline with no credentials.
+
+That whole chain runs on GitHub Actions on every push, every pull request, and once a week, in two jobs: the offline checks above, and a separate job that runs the pipeline over a live Kafka broker in containers. It needs no repository secret, no cloud credential, and no spend, and it deploys nothing. The weekly run is there because a finished repository gets no pushes, and a dormant one is where toolchain drift accumulates unseen. ADR-0008 records the reasoning.
 
 ## What the cloud gate caught
 
@@ -76,12 +78,14 @@ To exercise the full pipeline inside containers over a live broker in one shot:
 make container-smoke
 ```
 
-The quality gates that run in the build are available directly:
+The quality gates are available directly, and these are the exact targets CI calls:
 
 ```bash
 make lint
 make type-check       # strict mypy over the source tree
-make test             # 203 passed, 2 skipped
+make verify-versions  # one consistent set of dependency pins (INV-5)
+make hygiene          # pre-commit over the whole tree (NFR-M2)
+make test             # 253 passed, 2 skipped
 ```
 
 ## Live demo
@@ -113,7 +117,7 @@ The specification set is meant to be read in order.
 - `docs/40_tasks.md`: the ordered task backlog for the local phase.
 - `docs/50_cloud_strategy.md`: the local-first-then-AWS path and why AWS is the only cloud target.
 - `docs/60_panjuta_application.md`: how the reusable patterns harvested from earlier work apply to this pipeline.
-- `adr/`: the architecture decision records. ADR-0002 selects the Python consumer, ADR-0003 selects the cheapest viable AWS shape under a fifty-dollar ceiling, ADR-0004 is the non-functional invariant law, ADR-0005 records the Terraform setup-and-teardown design that keeps costly resources from lingering, ADR-0006 records ECR as the image-delivery mechanism, and ADR-0007 records the event-source adapter, the choice of data provider, and the rule that a missing reading is never fabricated.
+- `adr/`: the architecture decision records. ADR-0002 selects the Python consumer, ADR-0003 selects the cheapest viable AWS shape under a fifty-dollar ceiling, ADR-0004 is the non-functional invariant law, ADR-0005 records the Terraform setup-and-teardown design that keeps costly resources from lingering, ADR-0006 records ECR as the image-delivery mechanism, ADR-0007 records the event-source adapter, the choice of data provider, and the rule that a missing reading is never fabricated, and ADR-0008 records the continuous integration decision, including the limits of a scheduled run on a dormant repository.
 - `RUNBOOK.md`: the one-command cloud re-demo and the recorded spend.
 - `SETUP.md`: local setup and the recorded G1 timing.
 

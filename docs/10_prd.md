@@ -96,7 +96,7 @@ NFR-SEC4 Least privilege in cloud. Each cloud role grants only the actions its c
 
 NFR-M1 Single source of truth for dependencies. One runtime requirements file is installed by both the host environment and any container. Dev and tool dependencies are pinned in one place and a check fails the build if a pin disagrees across files. This follows the portfolio single-source-pinning rule. Verify: a version-consistency check across all dependency-declaring files.
 
-NFR-M2 Build hygiene gate. The pre-commit configuration must parse and install on a clean checkout, and the check for this must fail red on a knowingly broken config. This directly addresses the earlier build where a pre-commit config never parsed and a silent bootstrap swallowed the failure. Verify: a CI step that validates the config and a seeded-broken fixture that must fail.
+NFR-M2 Build hygiene gate. The pre-commit configuration must parse and install on a clean checkout, and the check for this must fail red on a knowingly broken config. This directly addresses the earlier build where a pre-commit config never parsed and a silent bootstrap swallowed the failure. Verify: a CI step that validates the config and a seeded-broken fixture that must fail. Satisfied twice over: `scripts/verify-precommit.sh` runs from `make bootstrap` and as the `hygiene` target, and the `checks` job in `.github/workflows/ci.yml` runs the same target on every push, every pull request, and weekly (ADR-0008).
 
 NFR-M3 Deterministic environment. A clean bootstrap produces a working environment with no manual steps. The clone-to-green time is measured and recorded, not asserted. Verify: time a clean bootstrap.
 

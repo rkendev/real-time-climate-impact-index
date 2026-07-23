@@ -32,6 +32,11 @@ what unlocks the Phase 2 (cloud) work (NFR-C1, AT-9).
 `make bootstrap` is idempotent: re-running it reuses an existing `.venv`, asserts
 the interpreter is Python 3.12, and re-runs the gate.
 
+The clone-to-green claim below is no longer a one-off measurement on one machine:
+the `checks` job in `.github/workflows/ci.yml` bootstraps from a clean checkout on
+a hosted runner and runs the same gates on every push, every pull request, and
+weekly (ADR-0008). The timings here stay as the recorded gate G1 figures.
+
 ## Measured clone-to-green (gate G1)
 
 Measured on the Phase 1 build host (Linux x86_64, Python 3.12.13):

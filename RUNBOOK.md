@@ -23,6 +23,14 @@ make pre-deploy-gate             # AT-9: marker, single-sourced versions, terraf
 
 Only on a green `pre-deploy-gate` may the paid sequence begin.
 
+Everything above except `make smoke`, `make pre-deploy-gate`, and the Terraform
+targets already runs in CI on every push, every pull request, and weekly
+(`.github/workflows/ci.yml`, ADR-0008), the container smoke as its own job. The
+Terraform stacks are still covered there, through the offline gate tests inside
+`make test`. So this list is the local mirror of an automated chain, and the
+operator steps that remain hand-run are the ones that write a marker or spend
+money.
+
 ## Paid sequence (bounded; only after the gate is green)
 
 Prerequisites (no spend): confirm current region pricing and free-tier eligibility;
