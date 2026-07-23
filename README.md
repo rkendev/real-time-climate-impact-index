@@ -1,5 +1,7 @@
 # Real-Time Climate Impact Index
 
+[![ci](https://github.com/rkendev/real-time-climate-impact-index/actions/workflows/ci.yml/badge.svg)](https://github.com/rkendev/real-time-climate-impact-index/actions/workflows/ci.yml)
+
 A streaming data pipeline that turns live weather and air quality readings into a per-region Climate Impact Index, with a confidence label attached to every number, and runs the exact same processing code on a laptop or on AWS by changing one config flag.
 
 Live demo: https://climate-index.85-215-55-99.sslip.io
