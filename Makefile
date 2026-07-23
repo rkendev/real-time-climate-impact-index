@@ -6,7 +6,7 @@ VENV := .venv
 BIN := $(VENV)/bin
 export PYTHONPATH := src
 
-.PHONY: bootstrap hooks lint type-check test infra_up run_producer run_processor smoke ui \
+.PHONY: bootstrap hooks hygiene verify-versions lint type-check test infra_up run_producer run_processor smoke ui \
 	tf-fmt tf-validate tf-plan teardown-audit pre-deploy-gate container-smoke \
 	image-build image-push verify-at5 verify-nfr-p3 \
 	vps-demo-up vps-demo-down vps-demo-refresh vps-demo-status
@@ -29,7 +29,7 @@ bootstrap:
 	$(BIN)/python -m pip install --upgrade pip
 	$(BIN)/pip install -r requirements.txt -r requirements-dev.txt
 	$(MAKE) hooks
-	PATH="$(CURDIR)/$(BIN):$$PATH" bash scripts/verify-precommit.sh
+	$(MAKE) hygiene
 
 # Wire the pre-commit git-hook shim. Skipped (not failed) only when the
 # environment sets core.hooksPath, which makes pre-commit refuse the shim; the
@@ -41,6 +41,18 @@ hooks:
 	else \
 		$(BIN)/pre-commit install; \
 	fi
+
+# The build-hygiene gate on its own (NFR-M2, AT-7): validate the pre-commit config,
+# then run every hook over the whole tree. Called from bootstrap and by CI, where
+# each gate is a separate named step so a failure has its own line on the run page.
+hygiene:
+	PATH="$(CURDIR)/$(BIN):$$PATH" bash scripts/verify-precommit.sh
+
+# The version-consistency gate on its own (INV-5, NFR-M1). It also runs as a
+# pre-commit hook and inside the pre-deploy gate; this target is how CI reports it
+# as a check of its own rather than as a line buried in another command's output.
+verify-versions:
+	$(BIN)/python scripts/verify_versions.py
 
 lint:
 	$(BIN)/ruff check .
