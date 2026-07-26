@@ -1,0 +1,18 @@
+Standing ephemeral stack, summarized before the destroy. Captured 2026-07-26.
+Commands: terraform -chdir=infra/ephemeral output, then state list. No apply, no plan.
+Account id, resource names, and addresses are redacted (public repository).
+
+== terraform output ==
+instance_id = "i-0a34a3a95b63e3bee"
+instance_public_ip = "IP_ADDRESS"
+
+== terraform state list ==
+aws_iam_instance_profile.processor
+aws_instance.app
+aws_internet_gateway.this
+aws_route.default
+aws_route_table.public
+aws_route_table_association.public
+aws_security_group.instance
+aws_subnet.public
+aws_vpc.this

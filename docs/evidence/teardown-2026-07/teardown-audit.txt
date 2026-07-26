@@ -1,0 +1,32 @@
+Post-teardown audit (AT-11), run 2026-07-26 immediately after the ephemeral destroy.
+Command:
+  CII_AWS_REGION=us-east-1 make teardown-audit
+(the region prefix supplies CII_AWS_REGION, which scripts/teardown_audit.py requires
+and which this checkout has no .env to provide; the target itself is unchanged).
+Account id, resource names, and addresses are redacted (public repository).
+
+== audit output (exit status 0) ==
+.venv/bin/python scripts/teardown_audit.py
+teardown audit OK: no billable resource carries the project tag 'climate-index'.
+
+== what still answers to the project tag afterwards ==
+The audit passes when nothing that bills by the hour carries the tag. It reads live
+state: running or pending instances, live NAT gateways, Elastic IPs, load balancers.
+The tag inventory below is the resource groups tagging index, which is eventually
+consistent and still lists two resources the destroy removed:
+
+  arn:aws:budgets::ACCOUNT_ID:budget/climate-index-monthly
+  arn:aws:dynamodb:us-east-1:ACCOUNT_ID:table/DYNAMO_TABLE
+  arn:aws:ec2:us-east-1:ACCOUNT_ID:instance/i-0a34a3a95b63e3bee
+  arn:aws:ec2:us-east-1:ACCOUNT_ID:volume/vol-051438566ab189ee0
+  arn:aws:ecr:us-east-1:ACCOUNT_ID:repository/ECR_REPOSITORY
+  arn:aws:glue:us-east-1:ACCOUNT_ID:database/climate_index
+  arn:aws:s3:::WAREHOUSE_BUCKET
+  arn:aws:s3:::RAW_BUCKET
+  arn:aws:s3:::STATE_BUCKET
+
+Checked directly, the instance reads 'terminated' and the volume returns
+InvalidVolume.NotFound, so neither bills. Everything else on that list is the
+persistent layer, left standing by design at storage-only rest cost: the two data
+buckets and the remote-state bucket, the DynamoDB serving table, the Glue database,
+the ECR repository, and the budget alarm.

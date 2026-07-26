@@ -1,0 +1,28 @@
+Ephemeral stack destroy, executed 2026-07-26 per RUNBOOK.md.
+Command:
+  TF_VAR_project_tag=climate-index TF_VAR_offline_plan=false \
+    terraform -chdir=infra/ephemeral destroy
+(run with -auto-approve -no-color in a non-interactive shell; the destroy plan
+was reviewed first and showed 0 to add, 0 to change, 9 to destroy).
+Account id, resource names, and addresses are redacted (public repository).
+
+== resource destruction ==
+aws_route.default: Destroying... [id=r-rtb-070964a6387fa765b1080289494]
+aws_route_table_association.public: Destroying... [id=rtbassoc-097f0ced15bdca58f]
+aws_instance.app: Destroying... [id=i-0a34a3a95b63e3bee]
+aws_route_table_association.public: Destruction complete after 1s
+aws_route.default: Destruction complete after 2s
+aws_route_table.public: Destroying... [id=rtb-070964a6387fa765b]
+aws_internet_gateway.this: Destroying... [id=igw-070830ce895a840b8]
+aws_route_table.public: Destruction complete after 1s
+aws_internet_gateway.this: Destruction complete after 30s
+aws_instance.app: Destruction complete after 33s
+aws_iam_instance_profile.processor: Destroying... [id=PROCESSOR_ROLE-5bf546d14cadfd84a964a2c0c3]
+aws_subnet.public: Destroying... [id=subnet-0e04d5be2f895335f]
+aws_security_group.instance: Destroying... [id=sg-01302698876a8abe9]
+aws_iam_instance_profile.processor: Destruction complete after 1s
+aws_subnet.public: Destruction complete after 1s
+aws_security_group.instance: Destruction complete after 1s
+aws_vpc.this: Destroying... [id=vpc-03d22504b18378ce9]
+aws_vpc.this: Destruction complete after 1s
+Destroy complete! Resources: 9 destroyed.

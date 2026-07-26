@@ -1,0 +1,144 @@
+Inventory of resources carrying the project tag, taken before the ephemeral destroy.
+Captured 2026-07-26. Command:
+  aws resourcegroupstaggingapi get-resources --tag-filters Key=Project,Values=climate-index --region us-east-1
+Account id, resource names, and addresses are redacted (public repository).
+
+{
+    "ResourceTagMappingList": [
+        {
+            "ResourceARN": "arn:aws:budgets::ACCOUNT_ID:budget/climate-index-monthly",
+            "Tags": [
+                {
+                    "Key": "Project",
+                    "Value": "climate-index"
+                }
+            ]
+        },
+        {
+            "ResourceARN": "arn:aws:s3:::WAREHOUSE_BUCKET",
+            "Tags": [
+                {
+                    "Key": "Project",
+                    "Value": "climate-index"
+                }
+            ]
+        },
+        {
+            "ResourceARN": "arn:aws:ec2:us-east-1:ACCOUNT_ID:volume/vol-051438566ab189ee0",
+            "Tags": [
+                {
+                    "Key": "Project",
+                    "Value": "climate-index"
+                }
+            ]
+        },
+        {
+            "ResourceARN": "arn:aws:ec2:us-east-1:ACCOUNT_ID:internet-gateway/igw-070830ce895a840b8",
+            "Tags": [
+                {
+                    "Key": "Project",
+                    "Value": "climate-index"
+                }
+            ]
+        },
+        {
+            "ResourceARN": "arn:aws:ec2:us-east-1:ACCOUNT_ID:security-group/sg-01302698876a8abe9",
+            "Tags": [
+                {
+                    "Key": "Project",
+                    "Value": "climate-index"
+                }
+            ]
+        },
+        {
+            "ResourceARN": "arn:aws:iam::ACCOUNT_ID:instance-profile/PROCESSOR_ROLE-5bf546d14cadfd84a964a2c0c3",
+            "Tags": [
+                {
+                    "Key": "Project",
+                    "Value": "climate-index"
+                }
+            ]
+        },
+        {
+            "ResourceARN": "arn:aws:s3:::RAW_BUCKET",
+            "Tags": [
+                {
+                    "Key": "Project",
+                    "Value": "climate-index"
+                }
+            ]
+        },
+        {
+            "ResourceARN": "arn:aws:dynamodb:us-east-1:ACCOUNT_ID:table/DYNAMO_TABLE",
+            "Tags": [
+                {
+                    "Key": "Project",
+                    "Value": "climate-index"
+                }
+            ]
+        },
+        {
+            "ResourceARN": "arn:aws:s3:::STATE_BUCKET",
+            "Tags": [
+                {
+                    "Key": "Project",
+                    "Value": "climate-index"
+                }
+            ]
+        },
+        {
+            "ResourceARN": "arn:aws:ecr:us-east-1:ACCOUNT_ID:repository/ECR_REPOSITORY",
+            "Tags": [
+                {
+                    "Key": "Project",
+                    "Value": "climate-index"
+                }
+            ]
+        },
+        {
+            "ResourceARN": "arn:aws:glue:us-east-1:ACCOUNT_ID:database/climate_index",
+            "Tags": [
+                {
+                    "Key": "Project",
+                    "Value": "climate-index"
+                }
+            ]
+        },
+        {
+            "ResourceARN": "arn:aws:ec2:us-east-1:ACCOUNT_ID:instance/i-0a34a3a95b63e3bee",
+            "Tags": [
+                {
+                    "Key": "Project",
+                    "Value": "climate-index"
+                }
+            ]
+        },
+        {
+            "ResourceARN": "arn:aws:ec2:us-east-1:ACCOUNT_ID:route-table/rtb-070964a6387fa765b",
+            "Tags": [
+                {
+                    "Key": "Project",
+                    "Value": "climate-index"
+                }
+            ]
+        },
+        {
+            "ResourceARN": "arn:aws:ec2:us-east-1:ACCOUNT_ID:subnet/subnet-0e04d5be2f895335f",
+            "Tags": [
+                {
+                    "Key": "Project",
+                    "Value": "climate-index"
+                }
+            ]
+        },
+        {
+            "ResourceARN": "arn:aws:ec2:us-east-1:ACCOUNT_ID:vpc/vpc-03d22504b18378ce9",
+            "Tags": [
+                {
+                    "Key": "Project",
+                    "Value": "climate-index"
+                }
+            ]
+        }
+    ]
+}

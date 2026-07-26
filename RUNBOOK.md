@@ -120,6 +120,29 @@ Tear down with the ephemeral destroy plus `make teardown-audit` as above.
 - Persistent layer left standing at near-zero rest (state, warehouse, and raw
   buckets; DynamoDB; Glue database; ECR image; budget alarm).
 
+### Bounded multi-day demo, torn down 2026-07-26
+
+A second ephemeral apply on 2026-07-22 was deliberately left running for a few
+days so the live cloud path could be demonstrated, instead of being destroyed the
+same hour. It was torn down on 2026-07-26 with the recorded sequence above: the
+ephemeral destroy removed 9 resources, and `make teardown-audit` then passed, so
+no billable resource carries the project tag. The persistent layer was left
+standing, as designed.
+
+Evidence is captured in `docs/evidence/teardown-2026-07/`: the tagged-resource
+inventory and the stack summary as they stood before the destroy, a Cost Explorer
+query over 2026-07-20 to 2026-07-26, the destruction log, and the audit output.
+Every file is redacted (account id, resource names, addresses) because this
+repository is public.
+
+On cost, the evidence repeats what the run above found rather than improving on
+it: `Project` was never activated as a cost-allocation tag in the billing
+console, and activation is not retroactive, so the tag-filtered Cost Explorer
+call reports zero and the grouped call puts the whole window under the empty tag
+value. Billing data also lags. The captured figures are therefore account-wide
+daily totals, an upper bound rather than a measurement of what the demo itself
+cost.
+
 ## Local live demo (the always-on link)
 
 A separate thing from everything above: the public demo runs the **local** backend

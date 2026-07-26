@@ -1,0 +1,47 @@
+Cost Explorer, 2026-07-20 through 2026-07-26 inclusive (End is exclusive in the API).
+Captured 2026-07-26.
+
+Billing data lags several hours to days, so every figure here is a point-in-time
+lower bound: the last day or two is incomplete and the current day is usually empty.
+
+Two calls were made, because the first one reads as zero and the second says why.
+
+Call 1, filtered on the project tag:
+  aws ce get-cost-and-usage --region us-east-1 \
+    --time-period Start=2026-07-20,End=2026-07-27 --granularity DAILY \
+    --metrics UnblendedCost --filter '{"Tags":{"Key":"Project","Values":["climate-index"]}}'
+
+  2026-07-20  0 USD  estimated=True
+  2026-07-21  0 USD  estimated=True
+  2026-07-22  0 USD  estimated=True
+  2026-07-23  0 USD  estimated=True
+  2026-07-24  0 USD  estimated=True
+  2026-07-25  0 USD  estimated=True
+  2026-07-26  0 USD  estimated=True
+  window total: 0.0 USD
+
+Call 2, grouped by the same tag key rather than filtered on it:
+  aws ce get-cost-and-usage --region us-east-1 \
+    --time-period Start=2026-07-20,End=2026-07-27 --granularity DAILY \
+    --metrics UnblendedCost --group-by Type=TAG,Key=Project
+
+  2026-07-20  'Project$' 0.5260892139 USD
+  2026-07-21  'Project$' 0.2015479444 USD
+  2026-07-22  'Project$' 1.2378885112 USD
+  2026-07-23  'Project$' 1.1788059599 USD
+  2026-07-24  'Project$' 1.1845467443 USD
+  2026-07-25  'Project$' 1.0700908603 USD
+  2026-07-26  no groups
+
+What the two calls show. Every dollar in the window groups under the key
+'Project$', the empty tag value, which is Cost Explorer's bucket for spend it
+cannot attribute to that tag. The Project tag is applied to the resources (see
+tagged-resources.txt) but was never activated as a cost-allocation tag in the
+billing console, and activation is not retroactive, so the filtered call in
+call 1 correctly reports zero against it. This matches the note in RUNBOOK.md
+from the 2026-07-20 run.
+
+So Cost Explorer cannot attribute this window's spend by tag. The daily amounts
+in call 2 are account-wide totals for those days, an upper bound on what the
+demo cost rather than a measurement of it. The instance-hours arithmetic in
+RUNBOOK.md remains the estimate of record for the demo itself.
