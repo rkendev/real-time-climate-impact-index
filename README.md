@@ -96,11 +96,11 @@ A hosted instance of the local pipeline runs continuously at [climate-index.85-2
 
 ![Dashboard overview](docs/img/dashboard-overview.png)
 
-*The dashboard: a region's current index, its label, and its confidence grade, above the index plotted over recent thirty-minute windows on a UTC axis.*
+*The dashboard: a region's current index, its label, and its confidence grade, above the index plotted over recent sixty-minute windows on a UTC axis.*
 
 ![Confidence strip](docs/img/confidence-strip.png)
 
-*The confidence strip: every thirty-minute window is colored by the grade the pipeline computed from that window's own data (teal measured, amber inferred, red ambiguous), so a thin window is flagged rather than hidden.*
+*The confidence strip: every sixty-minute window is colored by the grade the pipeline computed from that window's own data (teal measured, amber inferred, red ambiguous), so a thin window is flagged rather than hidden.*
 
 ## Run it on AWS
 
