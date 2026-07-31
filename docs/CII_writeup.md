@@ -49,7 +49,7 @@ The pipeline was built simulated-first, and that was the right call for everythi
 
 Swapping in the real source changed that. A timed-out request is a real gap. A null field in the response is a real gap. The dead-host run above is the controlled version of the experiment, and it is the moment the grade stopped being decoration: real absence, detected by committed code, reflected in the output, with no hand on the scale.
 
-![The confidence strip: one band per window, each coloured by the grade computed from that window's own input: teal MEASURED, amber INFERRED, red AMBIGUOUS.](img/confidence-strip.png)
+![The confidence strip. One band per window, coloured by the grade computed from that window's own input. Teal is MEASURED, amber INFERRED, red AMBIGUOUS.](img/confidence-strip.png)
 
 *The confidence strip: one band per window, coloured by the grade computed from that window's own input (teal MEASURED, amber INFERRED, red AMBIGUOUS). A thin window is flagged, never hidden.*
 
