@@ -8,6 +8,8 @@ Live demo: https://climate-index.85-215-55-99.sslip.io
 
 Github repo: github.com/rkendev/real-time-climate-impact-index
 
+Write-up: [docs/CII_writeup.md](docs/CII_writeup.md)
+
 ## What it is
 
 Most streaming demos show a number moving on a chart and ask you to trust it. This project takes the opposite stance: every index value is paired with a confidence label that is computed from how much clean data actually backed that window, and readings that fail validation are quarantined rather than silently averaged in. If the evidence for a region is thin, the dashboard says so instead of pretending the number is solid.

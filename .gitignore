@@ -28,3 +28,6 @@ __pycache__/
 .pytest_cache/
 .ruff_cache/
 .mypy_cache/
+
+# Local knowledge-graph output (graphify keeps a .gitignore-only footprint)
+graphify-out/
