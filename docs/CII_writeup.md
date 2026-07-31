@@ -39,7 +39,9 @@ One config flag selects the storage backend: DuckDB and local files on a laptop,
 
 Repo: [github.com/rkendev/real-time-climate-impact-index](https://github.com/rkendev/real-time-climate-impact-index). Live demo: [climate-index.85-215-55-99.sslip.io](https://climate-index.85-215-55-99.sslip.io), refreshing itself every thirty minutes.
 
-[SCREENSHOT A: dashboard overview. Region stat block with current index, verbal label, and confidence grade, above the index chart. Caption: "One region's current index, its label, and the confidence grade the pipeline computed for the newest window."]
+![Dashboard overview: a region stat block showing the current index, its verbal label, and its confidence grade, above the index chart.](img/dashboard-overview.png)
+
+*One region's current index, its label, and the confidence grade the pipeline computed for the newest window. The screenshots come from the hosted demo, which runs `CII_WINDOW_MINUTES=60` (`deploy/vps/demo.env.example`), while the narrative here describes a local run at the `window_minutes = 30` default (`src/climate_index/config.py`) — the window size is configuration, not something baked into the pipeline.*
 
 ## The grade was decoration until the data was real
 
@@ -47,7 +49,9 @@ The pipeline was built simulated-first, and that was the right call for everythi
 
 Swapping in the real source changed that. A timed-out request is a real gap. A null field in the response is a real gap. The dead-host run above is the controlled version of the experiment, and it is the moment the grade stopped being decoration: real absence, detected by committed code, reflected in the output, with no hand on the scale.
 
-[SCREENSHOT B: the confidence strip. Every 30-minute window colored by the grade computed from that window's own input (teal MEASURED, amber INFERRED, red AMBIGUOUS). Caption: "The confidence strip. A thin window is flagged, never hidden."]
+![The confidence strip: one band per window, each coloured by the grade computed from that window's own input — teal MEASURED, amber INFERRED, red AMBIGUOUS.](img/confidence-strip.png)
+
+*The confidence strip: one band per window, coloured by the grade computed from that window's own input (teal MEASURED, amber INFERRED, red AMBIGUOUS). A thin window is flagged, never hidden.*
 
 ## Replay runs in production, not just in a test
 
