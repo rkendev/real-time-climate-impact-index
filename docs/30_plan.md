@@ -1,7 +1,7 @@
 # 30 Delivery Plan
 
-Version: 0.4.0
-Related: `20_spec.md` (IDs), `adr/` (decisions), `50_cloud_strategy.md` (cloud detail)
+Version: 0.5.0
+Related: `20_spec.md` (IDs), `adr/` (decisions), `50_cloud_strategy.md` (cloud detail), `PREREGISTRATION.md` (the frozen contract for the disagreement-grading work, commit b81f1c9)
 
 The plan is phased. Phase 1 proves the system on one machine. Phase 2 moves it to AWS, which is the only cloud target (the earlier GCP phase is dropped; see `adr/0003-cloud-topology.md`). Hugging Face is not used at any point (see `50_cloud_strategy.md` for why). Each phase closes on a named gate before the next begins, which enforces the local-first, cheap-before-expensive rule (NFR-C1).
 
@@ -32,6 +32,16 @@ Acceptance tests map to use cases and requirements. A phase is done when its acc
 - AT-10 (NFR-PT1, INV-4): no cloud-vendor SDK import appears under the core package. With one cloud, this guards anti-lock-in hygiene and keeps the core unit-testable without cloud credentials, rather than proving a second-cloud move.
 - AT-11 (NFR-C2, ADR-0005): after tearing down the ephemeral compute layer, a tag-based audit finds no billable resource (running instance, NAT gateway, attached or unattached public IPv4 address, load balancer) still carrying the project tag.
 - AT-12 (UC-1, FR-1, ADR-0007): with `CII_SOURCE_BACKEND=real` and the network available, one producer tick emits at least one weather and one satellite envelope per configured region, all of which pass the unchanged validation gate, and the resulting window rows carry grades produced by the committed grader. A live check run by hand against the real provider, deliberately not a unit test: no network enters the suite, and the offline adapter tests drive `httpx.MockTransport` instead.
+- AT-13 (UC-8, FR-12, FR-13, NFR-DQ3, NFR-DQ4, ADR-0009): station observations reconcile against the model analysis end to end. Over recorded fixtures, every closed region-window carries a PM2.5 disagreement state and a provenance tier; a window whose sources disagree beyond the frozen tolerance reports both values and names the cities that drove it, with neither value substituted, averaged or preferred; a window with no qualifying station coverage carries the unchecked tier; and pollution_index is byte-identical to the same run with reconciliation disabled, which is what proves the disagreement state did not leak into the index.
+
+### Acceptance tests are not the only required guards
+
+AT-13 is the system-level test for UC-8, and it is the only new acceptance test, as the contract's scope states. **The seeded violations that NFR-DQ3 and NFR-DQ4 require are separate guards and are not acceptance tests.** They are unit and integration tests placed where the violation is observable rather than at the system boundary, and they are required regardless of the acceptance-test count:
+
+- one seeded violation for NFR-DQ3, in which the pipeline is made to resolve a disagreement rather than report it, and which must turn its guard red;
+- two seeded violations for NFR-DQ4, seeded separately because the branches fail independently: one forcing a computed tier onto a window with no qualifying coverage, and one forcing a window to inherit a neighbouring or previous window's tier. Each must turn its guard red on its own.
+
+This distinction is written down because the hazard is procedural rather than technical: "one new acceptance test" is a scope rule, and a later reader could honour it by deleting a seeded proof. A scope rule may not eat a validity rule. This is the same discipline as AT-7, where a seeded broken configuration proves the hygiene gate can fail, and as the companion tests that prove the INV-4 and INV-6 AST walk actually detects a banned import: every rule that passes by absence is paired with a proof that its detector works.
 
 ## Phase 1: local, single machine
 
@@ -66,6 +76,21 @@ Work, in order:
 6. Cost controls. Set the spend ceiling and confirm the teardown returns the project to storage-only resting cost (NFR-C2).
 
 Exit gate G2: the AWS pipeline passes the same acceptance tests as Phase 1 through the adapters, including AT-5 against the Iceberg store and NFR-P3 against the serving store, within the 50 dollar ceiling, and AT-11 confirms a clean teardown leaves no billable resource running. G2 is the terminal cloud gate; there is no Phase 3.
+
+## Reopen: disagreement grading
+
+Not a phase and not a cloud phase. G2 remains the terminal cloud gate and there is still no Phase 3. This work runs entirely local and at zero spend, under the contract frozen in `PREREGISTRATION.md` at commit b81f1c9 and the reopen recorded in `adr/0009-openaq-disagreement-grading.md`. Its scope, its pass and fail criteria, its cost cap and its abort rule live in that contract and are not restated here.
+
+Work, in order:
+
+1. Entity and schema edits. E-3, E-5 and the new E-8 through E-11, propagated to the DuckDB column tuple, the Iceberg schema, the DynamoDB item shape and the dashboard display model.
+2. Station observation adapter. UC-8's input side behind the existing source interface, selected through the settings object, with the key from the environment and no endpoint literal in source (INV-1, INV-6).
+3. Model PM2.5 on the existing adapter. The second half of the comparison, which does not exist today.
+4. Reconciliation. UC-8 proper, with the tolerance and every frozen rule read from the settings object rather than written into adapter code.
+5. Guards. AT-13, plus the three seeded violations required above, plus the no-fault control run.
+6. Presentation and honest limits. UC-5's rendering of the two new states, and the README limits the contract requires to sit above any number.
+
+Exit: the claims in the contract are evaluated exactly once against the sealed holdout and ship against the contract unmodified, whichever way they fall.
 
 ## Risks and their triggers
 
