@@ -110,12 +110,29 @@ The unit moved to the city-window before any comparison existed.
 the frozen file itself rather than only here, because a correction whose sequence
 is hidden is indistinguishable from motivated reasoning.
 
-The measurement uncertainty constant for PM2.5 was first verified wrongly, by the
-advisor, from a summarised fetch of the superseded version of the guidance. The
-owner then verified it independently and **also reported it wrongly**, confirming
-the superseded value. The error was caught only when the current version's text
-was extracted directly and the parameter table read, at which point the constant
-was found to have changed between versions while the surrounding prose had not.
+The first concerns the measurement uncertainty constant for PM2.5, and recording
+it correctly needs three labels rather than two. **The owner** decides. **The
+advisor** reviews and reports. **The build session** is the working session that
+reads sources and drafts, and until now it had no label at all, because the house
+rule against tool brand names leaves it unnameable and the obvious workaround is
+to fold its actions into one of the other two. That is exactly what happened, and
+it is the root cause of the misattribution corrected below. The three labels are
+used consistently from here on.
+
+The sequence was:
+
+1. The build session extracted the constant from the guidance published as
+   JRC120649. The reading was correct **for that document**. That document is the
+   superseded version, so the error was the version and not the reading.
+2. The advisor reported that same value as the current version's value, from a
+   summarised fetch, and described it as independent verification. **That was
+   wrong.**
+3. The build session extracted the current version directly, read the parameter
+   table, and caught the error, finding that the constant had changed between
+   versions while the surrounding prose had not.
+4. The advisor re-verified by extracting the PDF text and confirmed the corrected
+   value, which the owner relayed.
+
 The prose in the current version now contradicts its own table on the same
 printed page. The table binds, the discrepancy is quoted in the contract, and the
 sensitivity of the threshold to the two candidate values had already been
@@ -123,6 +140,15 @@ computed when the constant was ratified. That ordering is disclosed in the
 contract. The sensitivity table is analytic rather than observational, so no
 observation preceded the pre-registration, but the sequence is stated rather than
 left for a reader to reconstruct.
+
+**The contract's attribution of step 4 is wrong, and the contract is deliberately
+not amended.** Section 4.5 at b81f1c9 credits the confirming extraction to the
+owner. It was the advisor's second extraction, which the owner relayed. The
+contract's value rests on the freeze commit being untouched and its timestamp
+provably preceding any measurement, and a second version would force every reader
+to first establish which one was frozen. The slip concerns who performed a
+verification, not a predicate, a constant or a floor, so it is disclosed here and
+corrected here rather than by editing a frozen file.
 
 The licence rule was the second. As first written by the owner it excluded
 stations with unstated licence terms from admission entirely. Applied, it deleted
@@ -198,7 +224,7 @@ were contributing. A fixed population keeps each city's median computed over the
 same stations every hour. Weighed afterwards, the looser rule might have admitted
 one additional city, and the contract records that consequence in that order.
 
-**A recency-based admission filter.** The advisor's, wrong, and replaced before
+**A recency-based admission filter.** The build session's, wrong, and replaced before
 the freeze. It selected stations by how recently they had reported relative to
 the moment of selection, which is the wrong clock: the comparison consumes hours
 that are deliberately old, so a station that stopped reporting after the capture
@@ -206,7 +232,7 @@ window but covered all of it belongs in, and one that came online this morning
 does not. Admission is decided by coverage of the capture window instead.
 
 **Measuring the mapping radius from the configured city coordinate.** Also the
-advisor's, also wrong, also replaced before the freeze. The configured coordinate
+build session's, also wrong, also replaced before the freeze. The configured coordinate
 sits at an arbitrary position inside its model cell, so a station near the city
 can fall in a neighbouring cell and be compared against a value that does not
 describe it. The radius is measured from the grid point the provider returns.
