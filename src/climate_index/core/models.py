@@ -49,10 +49,25 @@ UtcDatetime = Annotated[datetime, AfterValidator(_require_utc)]
 
 
 class EventType(StrEnum):
-    """The two event kinds carried on the single transport topic (E-4, FR-2)."""
+    """The event kinds carried on the single transport topic (E-4, FR-2)."""
 
     WEATHER = "weather"
     SATELLITE = "satellite"
+    STATION = "station"
+
+
+class Construction(StrEnum):
+    """How a provider built the hourly station value (E-8).
+
+    Recorded, never gated on. The measurement uncertainty the later comparison
+    uses was derived for provider-validated hourly data, and one network supplies
+    sub-hourly samples that OpenAQ means into an hour instead. Excluding that
+    network after seeing it would be the move the licence rule already had to
+    correct, so the difference is carried as an attribute and reported.
+    """
+
+    PROVIDER_HOURLY = "PROVIDER_HOURLY"
+    COMPUTED_MEAN = "COMPUTED_MEAN"
 
 
 class Confidence(StrEnum):
@@ -114,6 +129,33 @@ class SatelliteEvent(BaseModel):
     model_pm25_ugm3: float = Field(ge=0)
 
 
+class StationObservation(BaseModel):
+    """E-8 StationObservation: one ground-station hour, for comparison only.
+
+    Never an input to the index. Its absence lowers the provenance tier of a
+    window (E-11), not the window's confidence grade (NFR-DQ2) and not any
+    component metric; the specification freezes that boundary and UC-3 states it.
+
+    ``pm25_ugm3`` carries no lower bound on purpose. Real instruments report
+    negative values near the detection limit, and the frozen rules retain them:
+    discarding or clamping would bias the station value upward exactly where the
+    later tolerance floor dominates, which would move a measured difference for a
+    reason that is not a difference. Validity is decided by the provider's own
+    quality flag and by at least one underlying sample, both applied in the
+    adapter, so nothing here invents a cutoff.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    ts: UtcDatetime
+    region: RegionCode
+    city: str
+    station_id: str
+    pm25_ugm3: float
+    sample_count: int = Field(ge=1)
+    construction: Construction
+
+
 class EventEnvelope(BaseModel):
     """E-4 EventEnvelope: the single message shape on the transport (FR-2).
 
@@ -130,9 +172,14 @@ class EventEnvelope(BaseModel):
     payload: dict[str, Any]
 
     @classmethod
-    def wrap(cls, event: WeatherEvent | SatelliteEvent) -> EventEnvelope:
+    def wrap(cls, event: WeatherEvent | SatelliteEvent | StationObservation) -> EventEnvelope:
         """Wrap a typed event in a region-keyed envelope (UC-1, NFR-S2)."""
-        event_type = EventType.WEATHER if isinstance(event, WeatherEvent) else EventType.SATELLITE
+        if isinstance(event, WeatherEvent):
+            event_type = EventType.WEATHER
+        elif isinstance(event, SatelliteEvent):
+            event_type = EventType.SATELLITE
+        else:
+            event_type = EventType.STATION
         return cls(
             event_type=event_type,
             key=event.region,

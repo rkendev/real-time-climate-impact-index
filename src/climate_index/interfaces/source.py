@@ -25,14 +25,14 @@ from __future__ import annotations
 from collections.abc import Sequence
 from typing import Protocol, runtime_checkable
 
-from climate_index.core.models import SatelliteEvent, WeatherEvent
+from climate_index.core.models import SatelliteEvent, StationObservation, WeatherEvent
 
 
 @runtime_checkable
 class EventSource(Protocol):
     """A source of one tick of typed, already validated events."""
 
-    def fetch_tick(self) -> Sequence[WeatherEvent | SatelliteEvent]:
+    def fetch_tick(self) -> Sequence[WeatherEvent | SatelliteEvent | StationObservation]:
         """Return the events for one tick, in no guaranteed order.
 
         May return fewer events than the configured regions would suggest, or

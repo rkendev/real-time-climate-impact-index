@@ -24,7 +24,7 @@ from dataclasses import dataclass
 
 from climate_index.config import Settings, get_settings
 from climate_index.core.engine import compute_records
-from climate_index.core.models import SatelliteEvent, WeatherEvent
+from climate_index.core.models import SatelliteEvent, StationObservation, WeatherEvent
 from climate_index.core.validation import ValidationGate
 from climate_index.interfaces import AggregateStore, CommittableConsumer, RawStore
 from climate_index.logging_utils import StructuredLogger, get_logger
@@ -70,7 +70,7 @@ def run_consumer_once(
     log = logger if logger is not None else get_logger("consumer")
 
     gate = ValidationGate()
-    validated: list[WeatherEvent | SatelliteEvent] = []
+    validated: list[WeatherEvent | SatelliteEvent | StationObservation] = []
     consumed = 0
     max_offset: int | None = None
     for offset, _key, value in consumer.poll():

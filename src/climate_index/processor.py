@@ -20,7 +20,7 @@ from dataclasses import dataclass
 from climate_index.adapters.memory import MemoryTransport
 from climate_index.config import Settings, get_settings
 from climate_index.core.engine import compute_records
-from climate_index.core.models import SatelliteEvent, WeatherEvent
+from climate_index.core.models import SatelliteEvent, StationObservation, WeatherEvent
 from climate_index.core.validation import ValidationGate
 from climate_index.interfaces import AggregateStore, RawStore, Transport
 from climate_index.logging_utils import StructuredLogger, get_logger
@@ -63,7 +63,7 @@ def process(
     log = logger if logger is not None else get_logger("processor")
 
     gate = ValidationGate()
-    validated: list[WeatherEvent | SatelliteEvent] = []
+    validated: list[WeatherEvent | SatelliteEvent | StationObservation] = []
     consumed = 0
     for _key, value in transport.consume():
         consumed += 1

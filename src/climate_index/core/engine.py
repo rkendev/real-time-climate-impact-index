@@ -23,7 +23,12 @@ from climate_index.core.features import (
     pollution_index,
     temperature_anomaly,
 )
-from climate_index.core.models import ClimateIndexRecord, SatelliteEvent, WeatherEvent
+from climate_index.core.models import (
+    ClimateIndexRecord,
+    SatelliteEvent,
+    StationObservation,
+    WeatherEvent,
+)
 from climate_index.core.windowing import assign_window
 
 _WindowKey = tuple[str, datetime, datetime]
@@ -38,7 +43,7 @@ class _Bucket:
 
 
 def compute_records(
-    events: Iterable[WeatherEvent | SatelliteEvent],
+    events: Iterable[WeatherEvent | SatelliteEvent | StationObservation],
     settings: Settings | None = None,
 ) -> list[ClimateIndexRecord]:
     """Compute one aggregate record per region per closed window.
@@ -51,6 +56,13 @@ def compute_records(
 
     buckets: dict[_WindowKey, _Bucket] = {}
     for event in events:
+        # Station observations are not index inputs. They are skipped before a
+        # bucket is created, so they can neither reach a component metric nor
+        # bring a region-window into existence that no index event supports.
+        # The specification freezes this boundary: station coverage feeds the
+        # provenance tier alone, never the confidence grade (UC-3, NFR-DQ2).
+        if isinstance(event, StationObservation):
+            continue
         window_start, window_end = assign_window(event.ts, window_minutes)
         key: _WindowKey = (event.region, window_start, window_end)
         bucket = buckets.setdefault(key, _Bucket())

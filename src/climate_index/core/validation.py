@@ -32,13 +32,24 @@ from climate_index.core.models import (
     QuarantineRecord,
     ReasonCode,
     SatelliteEvent,
+    StationObservation,
     WeatherEvent,
 )
 from climate_index.logging_utils import StructuredLogger, get_logger
 
-_MODEL_BY_TYPE: dict[EventType, type[WeatherEvent] | type[SatelliteEvent]] = {
+_ValidatedEvent = WeatherEvent | SatelliteEvent | StationObservation
+
+# Every EventType member needs an entry here. A member without one makes the
+# lookup below raise KeyError out of validate(), which is the gate dying instead
+# of rejecting, in the component whose whole job is not to die on bad input. The
+# lookup is guarded and a companion test proves the guard, so a future member
+# added without a model quarantines rather than crashing.
+_MODEL_BY_TYPE: dict[
+    EventType, type[WeatherEvent] | type[SatelliteEvent] | type[StationObservation]
+] = {
     EventType.WEATHER: WeatherEvent,
     EventType.SATELLITE: SatelliteEvent,
+    EventType.STATION: StationObservation,
 }
 
 _RANGE_TYPES = {"greater_than", "greater_than_equal", "less_than", "less_than_equal"}
@@ -73,7 +84,7 @@ class ValidationGate:
         self.quarantined_count = 0
         self.quarantines: list[QuarantineRecord] = []
 
-    def validate(self, message: Mapping[str, Any]) -> WeatherEvent | SatelliteEvent | None:
+    def validate(self, message: Mapping[str, Any]) -> _ValidatedEvent | None:
         """Return the validated event to forward, or None if it was quarantined."""
         try:
             event = self._parse(message)
@@ -83,7 +94,7 @@ class ValidationGate:
         self.forwarded_count += 1
         return event
 
-    def _parse(self, message: Mapping[str, Any]) -> WeatherEvent | SatelliteEvent:
+    def _parse(self, message: Mapping[str, Any]) -> _ValidatedEvent:
         if not isinstance(message, Mapping):
             raise _GateError("unknown", ReasonCode.PARSE)
         try:
@@ -91,7 +102,11 @@ class ValidationGate:
         except ValidationError as exc:
             claimed = str(message.get("event_type", "unknown"))
             raise _GateError(claimed, _classify(exc)) from exc
-        model = _MODEL_BY_TYPE[envelope.event_type]
+        model = _MODEL_BY_TYPE.get(envelope.event_type)
+        if model is None:
+            # A declared type with no model. Quarantine rather than raise: this
+            # gate never crashes on input, however malformed or however new.
+            raise _GateError(str(envelope.event_type), ReasonCode.SCHEMA)
         try:
             return model.model_validate(envelope.payload)
         except ValidationError as exc:
