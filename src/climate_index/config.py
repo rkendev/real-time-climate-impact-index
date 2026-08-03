@@ -306,6 +306,18 @@ class Settings(BaseSettings):
     # How long a single source fetch may take before it counts as a miss. A miss
     # emits no event and is logged and counted; it is never retried in a loop and
     # never replaced with a substituted value (UC-1 no-fabrication rule).
+    # FR-11 OpenAQ station source. Off by default, so every existing run is
+    # unchanged. The endpoint is None here and the key is empty here (INV-1);
+    # both arrive from the environment, and from_settings refuses by name rather
+    # than letting a None surface inside an HTTP client.
+    station_source_backend: str = "none"
+    openaq_base_url: str | None = None
+    openaq_api_key: str = ""
+    # The frozen admission lag, in hours. A mitigation and not a proof: the
+    # provider does not state whether a past hour is analysis or retained
+    # forecast, so this waits for a full model cycle to have completed.
+    station_analysis_lag_hours: int = 48
+
     source_fetch_timeout_s: float = 10.0
 
     # When true, the consumer entry point drains the broker once and exits instead

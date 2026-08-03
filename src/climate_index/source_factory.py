@@ -37,7 +37,31 @@ def build_event_source(
     """
     backend = settings.source_backend
     resolved = tuple(regions) if regions is not None else settings.region_list
+    primary = _build_primary(backend, settings, resolved, logger=logger)
 
+    if settings.station_source_backend == "none":
+        return primary
+    if settings.station_source_backend != "openaq":
+        raise ValueError(f"unknown station source backend: {settings.station_source_backend!r}")
+
+    # Two real sources now. The composite keeps one failing from costing the
+    # other, and counts a raised failure separately from an absent reading: a
+    # swallowed station fault would be indistinguishable downstream from a region
+    # having no station coverage, which is the finding this project publishes.
+    from climate_index.adapters.composite_source import CompositeEventSource
+    from climate_index.adapters.openaq import OpenAQStationSource
+
+    stations = OpenAQStationSource.from_settings(settings, (), logger=logger)
+    return CompositeEventSource([("primary", primary), ("stations", stations)], logger=logger)
+
+
+def _build_primary(
+    backend: str,
+    settings: Settings,
+    resolved: Sequence[str],
+    *,
+    logger: StructuredLogger | None,
+) -> EventSource:
     if backend == "simulated":
         from climate_index.adapters.simulated import SimulatedEventSource
 
