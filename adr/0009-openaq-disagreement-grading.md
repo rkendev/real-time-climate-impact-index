@@ -201,6 +201,43 @@ specifically to stop scope being relitigated later, which made it load-bearing, 
 it was the one sentence in the file nobody checked. Rigour was applied where the
 sources were foreign and withheld where they were familiar.
 
+## Follow-up: a model-side query covering the holdout window, disclosed
+
+Recorded 2026-08-03, during the first implementation task.
+
+Establishing that the model side of the comparison cannot deliver a negative or
+absent value required probing the provider, and the probe covered the sealed
+holdout window. Disclosed here in the same form the contract uses for the
+station metadata it reads next to its seal paragraph, because an auditor reading
+the history will see model values for the holdout period fetched during
+implementation and should find the answer already written rather than have to
+assemble it.
+
+**What was read.** Hourly `pm2_5` from the Open-Meteo air quality endpoint for
+the twelve configured sampling points, over the ninety-two days the endpoint
+serves, which is 26496 values. That span contains the holdout window.
+
+**What was computed from it.** Three numbers per city and three in total: the
+count of nulls, the count of negative values, and the minimum. Nulls and
+negatives were zero everywhere and the global minimum was exactly zero, which is
+what fixed the schema bound at greater-than-or-equal rather than greater-than
+and what makes the new range-rejection counter evidence rather than an
+assumption.
+
+**What was not done.** No station data was fetched. No station value and no model
+value were ever brought together. No difference, no tolerance, no flag, no rate
+and no distribution over any comparison was computed, because the station half of
+the comparison did not exist at that point and still does not. The disagreement
+statistic the holdout exists to protect cannot have been observed, since nothing
+capable of producing it had been written.
+
+**Why the seal is intact.** The seal protects the disagreement rate, which is a
+function of both sources. Reading one source alone constrains that function no
+more than reading none: the model values carry no information about how far the
+stations sit from them. The frozen rules were also already fixed and published at
+b81f1c9 before this query ran, so there was no knob left for it to move. The
+holdout still opens exactly once, when both halves exist.
+
 ## Alternatives considered
 
 Each was live, each was declined, and the point at which each was declined
