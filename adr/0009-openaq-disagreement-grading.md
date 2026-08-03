@@ -249,6 +249,60 @@ coverage rules and the split all sit in a commit that precedes the probe, so
 there was no knob left for it to move even had it carried information. The
 holdout still opens exactly once, when both halves exist.
 
+## The coverage re-verification, and how its result will be read
+
+Written 2026-08-03, **before the re-verification runs**. The reading is fixed here
+while the answer is still unknown, because an interpretation chosen after seeing
+a number is not an interpretation, it is a rationalisation.
+
+**Why a settled number is being checked twice.** The coverage figures in the
+contract came from a probe that ran at roughly 150 requests per minute against a
+published limit of 60. The documentation says exceeding the limit returns 429 and
+that repeated exceeding "can lead to either a temporary or permanent ban". That
+probe recorded failures which were read at the time as transient errors; they
+were most likely throttling. The contract's own section 3 says an empty result is
+not a negative result until the query is confirmed well formed, and that rule was
+written by the pre-flight and may not have been satisfied by it. The zeros are
+load-bearing, because AFR carrying the lower provenance tier permanently is the
+project's stated strongest output, so they are re-run at a compliant pace over all
+twelve cities rather than the seven that were admitted.
+
+**The three outcomes, and what each means.**
+
+1. **AFR returns zero again**, from a city query chain in which every response is
+   200 and no 429 and no other non-200 appears anywhere: the contract's zero is
+   **confirmed**. The confirmation and the throttling retrospective that caused it
+   both stay in this record. A number checked twice for a stated reason is
+   stronger than one never questioned.
+2. **AFR returns non-zero**: the contract's zero was **wrong**, and the probable
+   cause is the over-rate probe. The correction is published prominently, it
+   changes what the project's strongest output is, and it is not softened, not
+   explained away as a station that has since appeared, and not filed quietly in a
+   findings list.
+3. **Any 429 or other non-200 appears in a city's chain**: that city's result is
+   **void** and is re-run. A zero from a run containing failures is not a zero,
+   which is the contract's section 3 rule applied to this project's own
+   measurement rather than only to its sources.
+
+No outcome adjusts a frozen rule, and nothing is tuned to reproduce the
+contract's figure of 202 stations across seven cities.
+
+**What is reported.** The funnel per city, not the total: stations within the
+radius, then fixed, then reference grade, then carrying a PM2.5 sensor, then
+bracketing the capture window, plus the HTTP status distribution for that city's
+calls. The funnel is what makes the headline precise, because "AFR has no
+monitoring" and "AFR has monitoring that this threshold cannot use, because none
+of it is reference grade" are different claims and the second is both stronger
+and more interesting. The contract asserts the second; only the funnel shows
+which is true.
+
+Excluded cities stay distinguishable by reason and are never written up in one
+sentence. Madrid is excluded because reference-grade fixed stations near its grid
+point do not cover the capture window, which is a consequence of the frozen radius
+and admission rules rather than an absence of monitoring. Lagos, Nairobi, Cairo
+and Jakarta were zero at every radius up to the cap, which is a far stronger
+statement about the network itself.
+
 ## Post-project findings, recorded and not built
 
 Things worth fixing that this project will not fix. Section 2 of the contract
