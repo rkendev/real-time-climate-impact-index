@@ -249,6 +249,62 @@ coverage rules and the split all sit in a commit that precedes the probe, so
 there was no knob left for it to move even had it carried information. The
 holdout still opens exactly once, when both halves exist.
 
+## Post-project findings, recorded and not built
+
+Things worth fixing that this project will not fix. Section 2 of the contract
+says an apparent necessity outside scope is a finding to record rather than a
+scope change to make, and the frozen scope lists one new acceptance test and no
+hygiene gate. Recorded here rather than in a working note so they outlive the
+session that found them.
+
+1. **No permanent identifier-resolution gate.** A one-off audit over `docs/`,
+   `adr/` and the contract found ninety distinct identifiers with every reference
+   resolving to exactly one definition, no duplicates and no dangling references.
+   Nothing keeps it that way.
+2. **NFR-O2 and NFR-R3 have no acceptance test**, against the PRD's own rule that
+   a requirement without one is not considered delivered.
+3. **`test_run_producer_main_is_a_safe_noop_without_a_broker` is not isolated
+   from a local `.env`.** It strips the environment variable but cannot strip the
+   file that `env_file` reads, so a developer copying `.env.example` to `.env`
+   breaks it. Proven by moving the file aside: 40 minutes and a failure with it
+   present, 0.37 seconds and a pass without.
+4. **That same test's `subprocess.run` has no timeout.** It was 40 of the suite's
+   42 minutes when it failed.
+5. **The producer reports success when nothing reached a broker.** It logs
+   `published: 8` and exits zero while `librdkafka` writes connection-refused for
+   every attempt, so `make run_producer` looks like it worked. This is the only
+   one of these with consequences outside the test suite.
+6. **Fifteen test call sites read `Settings` without `_env_file=None`.** The
+   convention is used at more than thirty other sites, so these are omissions
+   rather than a missing practice. The failure mode is a **false green** rather
+   than a red, which is why it wants a gate and not vigilance; two instances have
+   already bitten this project, the `.env` in finding 3 and a gloss test that
+   first passed against the developer's machine rather than the repository.
+
+   **The cause is the committed default, not a local file.** `config.py` declares
+   `raw_store_path: Path = Path("data/raw")` and
+   `aggregate_store_path: Path = Path("data/aggregates.duckdb")`. A `Settings`
+   built in a test without those fields therefore points at the repository's own
+   data directory whether or not a `.env` exists, so deleting the local `.env`
+   did not close this and nothing else will short of setting the fields or
+   banning the bare constructor.
+
+   Latent, not realised, verified against the tree as it now stands: after a full
+   271-passed run on the `.env`-free tree, `data/aggregates.duckdb` and
+   `data/raw/raw_events.duckdb` both still carry their 2026-07-19 19:24 mtimes and
+   nothing under `data/` has been written today.
+
+   Exposed sites, most severe first, the first four because they omit
+   `raw_store_path`: `tests/aws/test_write_path_factory.py` lines 35, 68, 100 and
+   123; `tests/aws/test_store_factory.py` lines 25, 35, 64 and 78;
+   `tests/aws/test_teardown_audit.py` line 30; `tests/unit/test_atomic_publish.py`
+   line 42; and four `get_settings()` calls, which always read `.env`, at
+   `tests/unit/test_generators.py` lines 38 and 50, `tests/unit/test_producer.py`
+   line 40, and `tests/integration/test_terraform_offline.py` line 31.
+
+   A lint rule banning a bare `Settings(` and `get_settings()` under `tests/`
+   closes the class.
+
 ## Alternatives considered
 
 Each was live, each was declined, and the point at which each was declined
