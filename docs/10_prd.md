@@ -1,8 +1,8 @@
 # 10 Product Requirements Document
 
-Version: 0.4.0
+Version: 0.5.0
 Owner: Roy
-Related: `20_spec.md` (use cases and entities), `adr/` (decisions), `30_plan.md` (delivery)
+Related: `20_spec.md` (use cases and entities), `adr/` (decisions), `30_plan.md` (delivery), `PREREGISTRATION.md` (the frozen contract for the disagreement-grading work, commit b81f1c9)
 
 This document states what the system must do (functional requirements) and, with more weight, how well it must do it (non-functional requirements). Non-functional requirements are the emphasis of this project. Each requirement has a stable ID and a verification method so that it is testable rather than aspirational.
 
@@ -35,6 +35,12 @@ FR-8 Read-only dashboard. The dashboard shows, per selected region, a time serie
 FR-9 Verbal label mapping. The index range maps to low, medium, or high by fixed, documented thresholds. Verify: unit test on the threshold function.
 
 FR-10 Canonical commands. The operator drives the system through a fixed command set (bootstrap, infra up, run producer, submit or run the processor, smoke, dashboard). Verify: each command exists and the smoke command returns non-zero on a broken pipeline.
+
+FR-11 Station observation ingestion. The system ingests independent ground-station observations of surface PM2.5 for the configured sampling points, through the same configured-source mechanism as the other streams, so that enabling them is a configuration change and not a code change. An observation that fails to arrive is left out rather than filled in, exactly as for the other sources, and its absence reduces what can be checked rather than what is computed: no index value depends on a station. Which stations count, and over what period, are constrained by rules frozen in `PREREGISTRATION.md` at commit b81f1c9; this requirement does not restate them, because a rule that lives in two places is a rule that will diverge. Verify: adapter unit tests over recorded fixtures asserting the observation shape and the omission behaviour, with no network entering the suite (UC-1, E-8).
+
+FR-12 Disagreement reconciliation. Where a station observation and a model analysis of the same quantity are both present for the same unit of comparison, the system compares them and records the outcome as a state on the aggregate row. The comparison is evaluated at the city-window, which is where a station and a model value are physically comparable, and the outcome is carried at the region-window as well; both are reported, and a region-window names the cities that drove its state. The tolerance and its parameters, the spatial and temporal rules, and the aggregation are frozen in `PREREGISTRATION.md` at commit b81f1c9 and are cited here rather than restated. Verify: AT-13 end to end over recorded fixtures (UC-8, E-9, E-10).
+
+FR-13 Provenance tier assignment. Every aggregate row states whether it could be independently checked at all, as a tier distinct from the confidence grade of NFR-DQ2. A row with no qualifying station coverage carries the unchecked tier and is presented that way to the viewer. The tier is a first-class output rather than an error condition: whole regions may carry it permanently, and the product is required to show that rather than to hide it or to approximate around it. Verify: AT-13 asserts every closed region-window carries a tier, and that rows without qualifying coverage carry the unchecked one (UC-8, E-11).
 
 ## 3. Non-functional requirements (emphasis)
 
@@ -108,7 +114,11 @@ NFR-T1 Schema contracts. Raw and aggregate data have declared schema contracts e
 
 NFR-DQ1 Deterministic validation gate. Data acceptance is decided by a deterministic schema and threshold check, not by any model judgment. Anomalies are surfaced as flagged candidates and a deterministic gate decides accept or quarantine. This applies the Panjuta convergence pattern (see `60_panjuta_application.md`). Verify: unit test on the gate with valid, borderline, and invalid inputs.
 
-NFR-DQ2 Provenance-graded confidence. Each aggregate row carries a confidence grade derived from input completeness: MEASURED when both stream types are present in the window, INFERRED when a component is imputed from a single type, AMBIGUOUS when input is sparse below a threshold. The dashboard shows the grade. This applies Graphify's provenance grading from the Panjuta harvest. Verify: unit test mapping window input composition to grade.
+NFR-DQ2 Provenance-graded confidence. Each aggregate row carries a confidence grade derived from input completeness: MEASURED when both stream types are present in the window, INFERRED when a component is imputed from a single type, AMBIGUOUS when input is sparse below a threshold. The dashboard shows the grade. This applies Graphify's provenance grading from the Panjuta harvest. Verify: unit test mapping window input composition to grade. This grade reads absence only, and NFR-DQ3 below is a separate state that reads disagreement; neither modifies the other.
+
+NFR-DQ3 Disagreement is reported, never resolved. Target: where an independent observation and a model analysis of the same quantity differ beyond the frozen tolerance, the row carries a state saying so and carries both values, and the system never substitutes one source for the other, averages them into a single number, or presents one as the corrected version of the other. The state is scoped to the compared quantity alone and grades no other component. Rationale: a pipeline that silently picks a winner is making an accuracy judgement it has no basis for, and the honest output when two independent sources disagree is that they disagree. This is the property the existing confidence grade cannot express, because it reads absence rather than conflict. Verify: AT-13 asserts both values survive and the state is set, and a seeded violation in which the pipeline is made to resolve rather than report must turn its guard red. A guard that has only ever been observed passing has not been shown to work.
+
+NFR-DQ4 No fabricated or inherited provenance tier. Target: no row is ever assigned a tier computed from data the window does not have, inherited from a neighbouring region, or inherited from a previous window for the same region. Absence of coverage is stated as absence. Rationale: the failure this prevents is the one that looks best in a screenshot, because a fabricated or carried-forward tier makes coverage appear uniform when it is not, and uneven coverage is a real property of ground-station networks rather than a defect to smooth over. Verify: AT-13 over recorded fixtures, plus two seeded violations, seeded separately because the branches fail independently: one forcing a computed tier onto a window with no qualifying coverage, and one forcing a window to inherit a neighbouring or previous tier. Each must turn its guard red on its own.
 
 ### 3.9 Cost
 
