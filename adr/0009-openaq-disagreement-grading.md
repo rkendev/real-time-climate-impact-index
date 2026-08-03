@@ -231,11 +231,22 @@ the comparison did not exist at that point and still does not. The disagreement
 statistic the holdout exists to protect cannot have been observed, since nothing
 capable of producing it had been written.
 
-**Why the seal is intact.** The seal protects the disagreement rate, which is a
-function of both sources. Reading one source alone constrains that function no
-more than reading none: the model values carry no information about how far the
-stations sit from them. The frozen rules were also already fixed and published at
-b81f1c9 before this query ran, so there was no knob left for it to move. The
+**Why the seal is intact.** Not because reading one source cannot constrain a
+two-source statistic. It can: one side's distribution does narrow the joint one,
+and an earlier version of this paragraph claimed otherwise and overclaimed. The
+argument is narrower, and it is about what was computed rather than what was read.
+
+The three quantities taken out of the probe are a null count, a negative count
+and a minimum. All three are functions of the model side's validity range alone.
+None is a function of any station value, so none carries information about a
+difference between the two sources, which is what the holdout protects. The
+individual hourly values were not retained and were summarised in no other way.
+
+Second, and independently: every rule that could have responded to such
+information was already fixed and published at b81f1c9 before this query ran. The
+tolerance and its constants, the spatial and temporal rules, the admission and
+coverage rules and the split all sit in a commit that precedes the probe, so
+there was no knob left for it to move even had it carried information. The
 holdout still opens exactly once, when both halves exist.
 
 ## Alternatives considered
