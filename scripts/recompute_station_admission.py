@@ -85,6 +85,12 @@ class Call:
     remaining: str = ""
     limit: str = ""
     reset: str = ""
+    # Domain-detection probes are a separate population from the station query
+    # chain. The europe probe returns 400 by design for a point outside that
+    # domain, which is how the domain is determined; counting it as a failure
+    # would conflate "the query correctly reported no data here" with "the query
+    # failed", and would void every non-European city by construction.
+    domain_probe: bool = False
 
 
 @dataclass
@@ -105,13 +111,23 @@ class CityResult:
     calls: list[Call] = field(default_factory=list)
 
     @property
+    def station_calls(self) -> list[Call]:
+        return [call for call in self.calls if not call.domain_probe]
+
+    @property
     def statuses(self) -> Counter[int]:
-        return Counter(call.status for call in self.calls)
+        return Counter(call.status for call in self.station_calls)
 
     @property
     def void(self) -> bool:
-        """Any non-200 anywhere in this city's chain invalidates its result."""
-        return any(call.status != 200 for call in self.calls)
+        """Any non-200 in the station query chain invalidates this result.
+
+        Scoped to the station API, which is what the contract's rule is about: an
+        empty result is not a negative result until the query is confirmed well
+        formed. Domain probes are excluded because their negative answer is the
+        information being sought, not a failure to obtain one.
+        """
+        return any(call.status != 200 for call in self.station_calls)
 
 
 class Client:
@@ -122,7 +138,9 @@ class Client:
         self._last = 0.0
         self.calls: list[Call] = []
 
-    def get(self, url: str, *, keyed: bool) -> tuple[dict[str, Any] | None, Call]:
+    def get(
+        self, url: str, *, keyed: bool, domain_probe: bool = False
+    ) -> tuple[dict[str, Any] | None, Call]:
         if keyed:
             wait = PACE_SECONDS - (time.monotonic() - self._last)
             if wait > 0:
@@ -157,6 +175,7 @@ class Client:
         finally:
             if keyed:
                 self._last = time.monotonic()
+        call.domain_probe = domain_probe
         self.calls.append(call)
         return payload, call
 
@@ -174,14 +193,14 @@ def grid_point(client: Client, latitude: float, longitude: float) -> tuple[str, 
         f"{AIR_QUALITY_URL}?latitude={latitude}&longitude={longitude}"
         "&hourly=pm2_5&forecast_days=1&models=cams_europe"
     )
-    payload, _ = client.get(europe, keyed=False)
+    payload, _ = client.get(europe, keyed=False, domain_probe=True)
     if payload is not None and not payload.get("error"):
         return "cams_europe", float(payload["latitude"]), float(payload["longitude"])
     globe = (
         f"{AIR_QUALITY_URL}?latitude={latitude}&longitude={longitude}"
         "&hourly=pm2_5&forecast_days=1&models=cams_global"
     )
-    payload, _ = client.get(globe, keyed=False)
+    payload, _ = client.get(globe, keyed=False, domain_probe=True)
     if payload is None:
         raise RuntimeError(f"no grid point for {latitude},{longitude}")
     return "cams_global", float(payload["latitude"]), float(payload["longitude"])
@@ -292,19 +311,25 @@ def main() -> int:
 
     total = sum(r.admitted for r in results)
     cities = sum(1 for r in results if r.admitted > 0)
-    every_call = [c for r in results for c in r.calls]
+    every_call = [c for r in results for c in r.station_calls]
+    probes = [c for r in results for c in r.calls if c.domain_probe]
     codes = Counter(c.status for c in every_call)
     print(f"\n{total} admitted stations across {cities} cities")
-    print(f"{len(every_call)} calls, statuses {dict(sorted(codes.items()))}")
+    print(f"{len(every_call)} station calls, statuses {dict(sorted(codes.items()))}")
+    print(
+        f"{len(probes)} domain probes, statuses "
+        f"{dict(sorted(Counter(c.status for c in probes).items()))} "
+        "(a 400 here means the point is outside that model domain, by design)"
+    )
     print(f"any 429: {'YES' if codes.get(429) else 'no'}")
     print(f"void cities: {[r.city for r in results if r.void] or 'none'}")
     print("\nzeros, stated with their evidence:")
     for r in results:
         if r.admitted == 0:
-            ok = sum(1 for c in r.calls if c.status == 200)
+            ok = sum(1 for c in r.station_calls if c.status == 200)
             print(
                 f"  {r.city:<12} zero admitted from {ok} successful 200 responses, "
-                f"no 429: {'no' if not any(c.status == 429 for c in r.calls) else 'YES'}"
+                f"no 429: {'no' if not any(c.status == 429 for c in r.station_calls) else 'YES'}"
             )
     print("\nadmitted station ids per city, for reproducibility:")
     for r in results:
