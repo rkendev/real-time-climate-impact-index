@@ -1,6 +1,6 @@
 # 20 Specification (Source of Truth)
 
-Version: 0.5.0
+Version: 0.6.0
 Status: this document is the source of truth. Code, tests, infrastructure, and prose documentation are downstream artifacts generated from it. A change to behavior is an edit here first, then a cascade downstream. This follows the AI Unified Process described in the spec-driven-development source (`Research/New_Spec Driven Development Info/Spec-Driven Development How AI Is Flipping the Script on Software Engineering.txt`).
 
 The specification has two halves the source calls out explicitly: an entity model (the nouns, the data) and system use cases (the verbs, the behavior). Everything downstream traces to an ID in one of these halves.
@@ -60,6 +60,7 @@ The aggregate row, one per region per closed window (FR-6).
 - dryness_index: float, component metric.
 - pollution_index: float, component metric.
 - confidence: one of MEASURED, INFERRED, AMBIGUOUS (NFR-DQ2). Derived from the completeness of the weather and satellite streams only. The station stream is not an input to it, and neither is the disagreement state below.
+- model_pm25_ugm3: float or null, the mean model PM2.5 across the window's satellite events for the region, in micrograms per cubic metre. Null where the window held no satellite event, and null on every row written before this field existed, because backfilling the shipped index is out of scope. It is a reported summary and is not the input to the disagreement comparison, which the contract evaluates at city granularity (E-9); nothing here is a second, region-level statement of a frozen rule.
 - pm25_disagreement: a PM2.5DisagreementState (E-10), required (NFR-DQ3).
 - provenance_tier: a ProvenanceTier (E-11), required (NFR-DQ4).
 - Natural key: (region, window_start, window_end). Writes are idempotent on this key (FR-6, NFR-R1): locally via INSERT OR REPLACE, on AWS via an Apache Iceberg MERGE. The key is reproducible across replays because window boundaries are derived from event time by truncation, not from arrival time (see UC-3 and ADR-0002).
@@ -197,6 +198,13 @@ Each use case has an ID, actors, a trigger, a main flow, and the requirements an
 When a requirement changes, edit this specification first. Identify the affected E-*, UC-*, FR-*, NFR-*, and AT-* IDs, then regenerate or amend the downstream code, tests, and infrastructure to match. A downstream patch with no corresponding change here is a defect against NFR-M4.
 
 ### Change log
+
+0.6.0 (2026-08-03). E-5 gains the model PM2.5 value, and a factual error in the frozen contract is recorded rather than amended.
+
+- Affected entity: E-5 (model_pm25_ugm3 added, nullable, with the note that it is a reported summary and not the comparison input).
+- Why this is not a scope expansion. Section 2 of `PREREGISTRATION.md` at commit b81f1c9 states that the new field on SatelliteEvent "propagates to the DuckDB column tuple, the Iceberg schema, the DynamoDB item shape and the dashboard". The four named surfaces are right. The carrier named is wrong: those four surfaces all carry ClimateIndexRecord, while SatelliteEvent reaches only the raw store, which stores a JSON payload and needs no schema change. The field on the aggregate is therefore not an addition beside the contract but what the contract's own stated propagation actually requires, exactly as the third envelope member followed from the frozen source-Protocol clause.
+- The contract is deliberately not amended. It contains a factual error about the existing code, discovered at implementation and corrected here in the record. Its value rests on the freeze commit being untouched and its timestamp provably preceding any measurement, and the error concerns a description of the codebase rather than a predicate, a constant or a floor.
+- The reusable lesson, recorded because it is the more useful half. The pre-flight verified the external citations and the API surfaces to the byte, and it verified that the pipeline carries aerosol optical depth rather than a mass concentration. It then asserted this propagation path without checking it. A pre-registration that describes an existing system has to verify its description of that system with the same rigour it applies to a published document. That sentence was added specifically to stop scope being relitigated later, and it was the one sentence in the file nobody checked.
 
 0.5.0 (2026-08-03). The transport envelope gains a third event type, and the boundary between the confidence grade and station coverage is frozen.
 
