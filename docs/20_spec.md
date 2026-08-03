@@ -1,6 +1,6 @@
 # 20 Specification (Source of Truth)
 
-Version: 0.4.0
+Version: 0.5.0
 Status: this document is the source of truth. Code, tests, infrastructure, and prose documentation are downstream artifacts generated from it. A change to behavior is an edit here first, then a cascade downstream. This follows the AI Unified Process described in the spec-driven-development source (`Research/New_Spec Driven Development Info/Spec-Driven Development How AI Is Flipping the Script on Software Engineering.txt`).
 
 The specification has two halves the source calls out explicitly: an entity model (the nouns, the data) and system use cases (the verbs, the behavior). Everything downstream traces to an ID in one of these halves.
@@ -40,9 +40,13 @@ Scope note on model_pm25_ugm3. This field exists only to support the disagreemen
 
 The single message shape on the transport (FR-2).
 
-- event_type: one of weather, satellite. Required.
-- payload: the WeatherEvent or SatelliteEvent body matching event_type.
+- event_type: one of weather, satellite, station. Required.
+- payload: the WeatherEvent, SatelliteEvent or StationObservation body matching event_type.
 - key: the region code, used as the transport partition key (NFR-S2).
+
+Why station is a member here rather than a separate path. The contract frozen in `PREREGISTRATION.md` at commit b81f1c9 places the station source behind the existing source Protocol. An adapter behind that Protocol is emitted by the producer through this envelope, so the third member follows mechanically from a frozen clause rather than being an addition beside it. The considered alternative was to fetch station observations outside the transport and join them at reconciliation time. That would leave E-4 untouched, and it is rejected: it contradicts the same frozen clause and creates a second data path with its own failure modes, its own ordering, and no quarantine gate.
+
+Consequence for the gate. UC-2 validates against the schema for the claimed event_type. With a third member, an unrecognised or malformed station payload must quarantine exactly as the other two do. A gate that lets an unknown type through silently is a gate that cannot fail on the case it was widened for, so this is discharged by a seeded violation rather than by inspection (`30_plan.md`).
 
 ### E-5 ClimateIndexRecord
 
@@ -55,7 +59,7 @@ The aggregate row, one per region per closed window (FR-6).
 - temperature_anomaly: float, component metric.
 - dryness_index: float, component metric.
 - pollution_index: float, component metric.
-- confidence: one of MEASURED, INFERRED, AMBIGUOUS (NFR-DQ2). Derived from input completeness only. It is not affected by the disagreement state below.
+- confidence: one of MEASURED, INFERRED, AMBIGUOUS (NFR-DQ2). Derived from the completeness of the weather and satellite streams only. The station stream is not an input to it, and neither is the disagreement state below.
 - pm25_disagreement: a PM2.5DisagreementState (E-10), required (NFR-DQ3).
 - provenance_tier: a ProvenanceTier (E-11), required (NFR-DQ4).
 - Natural key: (region, window_start, window_end). Writes are idempotent on this key (FR-6, NFR-R1): locally via INSERT OR REPLACE, on AWS via an Apache Iceberg MERGE. The key is reproducible across replays because window boundaries are derived from event time by truncation, not from arrival time (see UC-3 and ADR-0002).
@@ -137,6 +141,7 @@ Each use case has an ID, actors, a trigger, a main flow, and the requirements an
 - Actors: Stream processor.
 - Trigger: an EventEnvelope is consumed.
 - Main flow: parse the envelope, validate the payload against the schema for its event_type through the deterministic gate. On pass, forward to windowing. On fail, write a QuarantineRecord with a reason_code and increment the quarantine counter. Never forward or persist an invalid event as data.
+- All three types, identically: a station payload is validated, quarantined and counted by exactly the same gate and the same reason codes as a weather or satellite payload, with no separate path and no leniency. An envelope carrying an event_type outside the declared set is itself a validation failure and quarantines rather than passing through.
 - Satisfies: FR-3, NFR-DQ1, NFR-T1, NFR-O1.
 
 ### UC-3 Window and compute the index
@@ -144,6 +149,7 @@ Each use case has an ID, actors, a trigger, a main flow, and the requirements an
 - Actors: Stream processor.
 - Trigger: events accumulate; an event-time tumbling window closes. Window membership is decided by truncating each event timestamp to the window size, so boundaries are a deterministic function of the data (ADR-0002). Watermarks and late-data handling are deferred; a late event lands in its bucket if still open, otherwise it is counted as late and excluded.
 - Main flow: group validated events by region for the window, compute temperature_anomaly, dryness_index, pollution_index, then impact_index and verbal_label, and assign a confidence grade from the window input composition. Produce one ClimateIndexRecord per region. The reconciliation of UC-8 then sets that record's pm25_disagreement and provenance_tier; it runs after the index is computed and changes none of the values above.
+- The confidence grader reads the weather and satellite streams only. Station observations are excluded from it deliberately, and this separation is frozen. Feeding them in would drop a tier on every window without station coverage for a reason unrelated to disagreement, would change the meaning of grades already shipped without any claim being measured, and would put whole regions at the lower tier under two mechanisms at once. Station coverage feeds the provenance tier (E-11) and nothing else. This is the same separation the contract makes for the disagreement state, which is scoped to PM2.5 and does not grade pollution_index (E-3 scope note); the precedent is deliberate.
 - Satisfies: FR-4, FR-5, FR-9, NFR-R1, NFR-R4, NFR-DQ2.
 
 ### UC-8 Reconcile station observations against the model analysis
@@ -160,6 +166,7 @@ Each use case has an ID, actors, a trigger, a main flow, and the requirements an
 - Actors: Stream processor, Store.
 - Trigger: a ClimateIndexRecord is produced, or a validated raw event is ready to persist.
 - Main flow: write the ClimateIndexRecord idempotently on its natural key, and append the validated raw event to the raw store. On replay, the aggregate write does not duplicate rows.
+- The append-only raw store carries all three event types (FR-7). A validated station observation is appended exactly as a weather or satellite event is, so the audit and replay guarantee covers the stream that the disagreement state depends on rather than only the two that feed the index.
 - Satisfies: FR-6, FR-7, NFR-R1, NFR-R2.
 
 ### UC-5 View the index
@@ -167,7 +174,7 @@ Each use case has an ID, actors, a trigger, a main flow, and the requirements an
 - Actors: Viewer, Store.
 - Trigger: the viewer opens the dashboard and selects a region.
 - Main flow: the dashboard reads aggregate rows for the region through a read-only connection, plots the impact_index time series, shows the current value, the verbal label, and the confidence grade. The dashboard performs no computation and no writes.
-- Presentation: the page also explains itself to a first-time viewer. It states in plain language what the index is with its scale and direction (E-5, E-7), states which source is active and what that source is (UC-1): under the simulated source, that the readings are generated rather than collected; under the real source, what is fetched, how often it is republished, that the vegetation term is a configured monthly reference rather than a measurement (E-3), and that a reading which fails to arrive is left out rather than filled in. The page carries the data provider attribution the source's terms require. It shows the newest window time and the refresh cadence, and carries two legends: the confidence tiers with what drives each (NFR-DQ2) and the verbal-label band cutoffs (FR-9). The time series is plotted against real window times with the index range on the value axis, and each point carries its stored confidence grade. The window axis is written on the server as a UTC clock label and the chart is pinned to that order, so the axis states the same instant as the freshness line rather than the viewer's local time, and a series that crosses midnight stays in order. The per-window confidence strip colours each grade from a configured tier mapping that reads the way a viewer expects before consulting the legend, strongest tier calm through weakest tier warm. An about panel gives a one-line description of the pipeline and a link to the source repository. Every one of these definitions is read from configuration, which holds them as the single authority; the page invents none of them, computes nothing, and still issues no writes.
+- Presentation: the page also explains itself to a first-time viewer. It states in plain language what the index is with its scale and direction (E-5, E-7), states which source is active and what that source is (UC-1): under the simulated source, that the readings are generated rather than collected; under the real source, what is fetched, how often it is republished, that the vegetation term is a configured monthly reference rather than a measurement (E-3), and that a reading which fails to arrive is left out rather than filled in. The page carries the data provider attribution the source's terms require. It shows the newest window time and the refresh cadence, and carries two legends: the confidence tiers with what drives each (NFR-DQ2) and the verbal-label band cutoffs (FR-9). The configured tier glosses must name the weather and satellite streams explicitly rather than saying "both stream types", which stopped being accurate when a third stream type was declared in E-4; a gloss that miscounts the streams misdescribes the grade to the one reader who cannot check it. The time series is plotted against real window times with the index range on the value axis, and each point carries its stored confidence grade. The window axis is written on the server as a UTC clock label and the chart is pinned to that order, so the axis states the same instant as the freshness line rather than the viewer's local time, and a series that crosses midnight stays in order. The per-window confidence strip colours each grade from a configured tier mapping that reads the way a viewer expects before consulting the legend, strongest tier calm through weakest tier warm. An about panel gives a one-line description of the pipeline and a link to the source repository. Every one of these definitions is read from configuration, which holds them as the single authority; the page invents none of them, computes nothing, and still issues no writes.
 - Disagreement and provenance: the existing confidence strip also carries the PM2.5 disagreement state (E-10) and the provenance tier (E-11) for each window, from a configured mapping in the same way as the confidence tiers. Where a window is DISAGREED the page shows both the station value and the model value and never a single reconciled number, and it names the cities that drove the state. Where a window is UNCHECKED the page says that it could not be independently checked, which is a statement about coverage and not about the index. The page states that the disagreement state applies to PM2.5 only and does not grade pollution_index. The station data provider attributions required by their terms are carried alongside the existing ones.
 - Satisfies: FR-8, FR-9, FR-12, FR-13, NFR-P3, NFR-SEC3, NFR-DQ2, NFR-DQ3, NFR-DQ4.
 
@@ -190,6 +197,15 @@ Each use case has an ID, actors, a trigger, a main flow, and the requirements an
 When a requirement changes, edit this specification first. Identify the affected E-*, UC-*, FR-*, NFR-*, and AT-* IDs, then regenerate or amend the downstream code, tests, and infrastructure to match. A downstream patch with no corresponding change here is a defect against NFR-M4.
 
 ### Change log
+
+0.5.0 (2026-08-03). The transport envelope gains a third event type, and the boundary between the confidence grade and station coverage is frozen.
+
+- Affected entities: E-4 (event_type gains station, with the scope reasoning and the rejected alternative recorded in place), E-5 (the confidence field now says the grader reads the weather and satellite streams only).
+- Affected use cases: UC-2 (the gate validates and quarantines all three types identically, and an event_type outside the declared set is itself a validation failure), UC-3 (the confidence grader excludes station observations, and why), UC-4 (the append-only raw store carries all three types, FR-7), UC-5 (the tier glosses must name the two streams rather than saying "both").
+- Scope reasoning, recorded rather than left implicit: the contract at b81f1c9 enumerates one schema change, the model PM2.5 field, and a third envelope member is a second one. It is in scope because the contract also freezes the station source behind the existing source Protocol, and an adapter behind that Protocol emits through this envelope, so the member follows mechanically from a frozen clause. The alternative that avoids it, fetching outside the transport and joining at reconciliation, contradicts the same clause and adds a second data path with no quarantine gate. Rejected on that ground, not on effort.
+- The confidence separation is the load-bearing part of this edit. With three stream types the existing glosses were wrong on their face, and feeding station coverage into the MEASURED, INFERRED, AMBIGUOUS grader would have changed the meaning of grades already shipped without any claim being measured, and would have placed uncovered regions at the lower tier under two mechanisms at once. Station coverage feeds the provenance tier alone.
+- Downstream consequence to expect: the validation gate, the quarantine path and the raw store all widen to a third type, and the configured tier glosses are reworded at implementation. The seeded violation that proves the widened gate can fail is listed in `30_plan.md`.
+- Unchanged and deliberately so: E-1, E-2, E-6, the index formula, the confidence rule itself, and the idempotent write. The grader's behaviour does not change; what changes is that the specification now says what it reads.
 
 0.4.0 (2026-08-02). Station observations are reconciled against the model analysis, and the outcome becomes two first-class output states. The reopen is recorded in `adr/0009-openaq-disagreement-grading.md`; the contract it runs under is `PREREGISTRATION.md`, frozen at commit b81f1c9, which is the sole authority on every constant, rule, claim and floor. This specification states structure and behaviour and defers every number to that file.
 

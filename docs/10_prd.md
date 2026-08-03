@@ -1,6 +1,6 @@
 # 10 Product Requirements Document
 
-Version: 0.5.0
+Version: 0.5.1
 Owner: Roy
 Related: `20_spec.md` (use cases and entities), `adr/` (decisions), `30_plan.md` (delivery), `PREREGISTRATION.md` (the frozen contract for the disagreement-grading work, commit b81f1c9)
 
@@ -114,7 +114,7 @@ NFR-T1 Schema contracts. Raw and aggregate data have declared schema contracts e
 
 NFR-DQ1 Deterministic validation gate. Data acceptance is decided by a deterministic schema and threshold check, not by any model judgment. Anomalies are surfaced as flagged candidates and a deterministic gate decides accept or quarantine. This applies the Panjuta convergence pattern (see `60_panjuta_application.md`). Verify: unit test on the gate with valid, borderline, and invalid inputs.
 
-NFR-DQ2 Provenance-graded confidence. Each aggregate row carries a confidence grade derived from input completeness: MEASURED when both stream types are present in the window, INFERRED when a component is imputed from a single type, AMBIGUOUS when input is sparse below a threshold. The dashboard shows the grade. This applies Graphify's provenance grading from the Panjuta harvest. Verify: unit test mapping window input composition to grade. This grade reads absence only, and NFR-DQ3 below is a separate state that reads disagreement; neither modifies the other.
+NFR-DQ2 Provenance-graded confidence. Each aggregate row carries a confidence grade derived from input completeness across the weather and satellite streams only: MEASURED when both of those streams are present in the window, INFERRED when a component is imputed from one of them alone, AMBIGUOUS when input is sparse below a threshold. Station observations are deliberately excluded from this grade and feed the provenance tier of FR-13 instead; the earlier wording said "both stream types", which stopped being accurate when E-4 declared a third. The dashboard shows the grade. This applies Graphify's provenance grading from the Panjuta harvest. Verify: unit test mapping window input composition to grade. This grade reads absence only, and NFR-DQ3 below is a separate state that reads disagreement; neither modifies the other.
 
 NFR-DQ3 Disagreement is reported, never resolved. Target: where an independent observation and a model analysis of the same quantity differ beyond the frozen tolerance, the row carries a state saying so and carries both values, and the system never substitutes one source for the other, averages them into a single number, or presents one as the corrected version of the other. The state is scoped to the compared quantity alone and grades no other component. Rationale: a pipeline that silently picks a winner is making an accuracy judgement it has no basis for, and the honest output when two independent sources disagree is that they disagree. This is the property the existing confidence grade cannot express, because it reads absence rather than conflict. Verify: AT-13 asserts both values survive and the state is set, and a seeded violation in which the pipeline is made to resolve rather than report must turn its guard red. A guard that has only ever been observed passing has not been shown to work.
 
