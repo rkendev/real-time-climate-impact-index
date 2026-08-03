@@ -60,7 +60,8 @@ lint:
 
 type-check:
 	$(BIN)/mypy src app/dashboard.py scripts/teardown_audit.py scripts/verify_at5_glue.py \
-		scripts/verify_nfr_p3.py deploy/vps/feed_history.py deploy/vps/publish_snapshot.py
+		scripts/verify_nfr_p3.py scripts/recompute_station_admission.py \
+		deploy/vps/feed_history.py deploy/vps/publish_snapshot.py
 
 test:
 	$(BIN)/pytest
