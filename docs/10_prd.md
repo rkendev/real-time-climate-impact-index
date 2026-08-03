@@ -1,6 +1,6 @@
 # 10 Product Requirements Document
 
-Version: 0.5.1
+Version: 0.6.0
 Owner: Roy
 Related: `20_spec.md` (use cases and entities), `adr/` (decisions), `30_plan.md` (delivery), `PREREGISTRATION.md` (the frozen contract for the disagreement-grading work, commit b81f1c9)
 
@@ -134,3 +134,11 @@ Every FR and NFR above names a verification method. The plan in `30_plan.md` tur
 
 - Stream processor: the Python consumer (ADR-0002). Kafka as the transport is fixed. Flink is a deferred, ADR-gated upgrade.
 - Cloud: AWS only, cheapest shape (ADR-0003). Local containers on one small ephemeral compute instance, S3 with Iceberg as the aggregate-of-record, DynamoDB as the serving store, Athena for ad-hoc queries. EKS, MSK, and Managed Flink were ruled out on idle cost; the upgrade path if budget grows is recorded in ADR-0003.
+
+## 6. Change log
+
+0.6.0 (2026-08-03). NFR-DQ2 is scoped to the weather and satellite streams explicitly, and station observations are excluded from the confidence grade.
+
+This is a decision and not a clarification, which is why it is a minor version rather than a patch. The previous wording, "both stream types present in the window", was written when the envelope had two members and was phrased so that it would extend to any stream type the system later declared. Once E-4 declared a third, the specification and the implemented grader disagreed: the requirement as written reached the station stream, and the committed grader did not read it. Resolving a divergence between two authorities is a decision, and this one determines whether a region can drop a confidence tier under two mechanisms at once. It is resolved in favour of the existing behaviour, so the grader is unchanged and the requirement now describes what it actually does. Station coverage feeds the provenance tier of FR-13 alone.
+
+0.5.0 (2026-08-02). FR-11, FR-12, FR-13, NFR-DQ3 and NFR-DQ4 defined, for the disagreement-grading work contracted in `PREREGISTRATION.md` at commit b81f1c9.
