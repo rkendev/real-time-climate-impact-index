@@ -303,6 +303,108 @@ and admission rules rather than an absence of monitoring. Lagos, Nairobi, Cairo
 and Jakarta were zero at every radius up to the cap, which is a far stronger
 statement about the network itself.
 
+## The coverage re-verification: result
+
+Run 2026-08-03, after the reading above was committed at 5668272 and the script at
+959a132. Twelve cities, paced below the rate limit. **300 station calls, every one
+of them 200, no 429 anywhere, no void city.** Twenty domain probes accompany them,
+of which eight returned 400, which is the informative answer and not a failure;
+see the apparatus defect below.
+
+```
+    city         dom    R km cap   inR  fixed  refgrade  pm25  admitted  statuses
+EUR Amsterdam    EU      6.5  no    14     14        10     5         5  200x6
+EUR Berlin       EU      6.5  no    17     17        11     9         7  200x10
+EUR Madrid       EU      7.0  no    21     21        15     6         6  200x7
+NAM New York     GL     25.0 yes    71     71        26    19        15  200x20
+NAM Chicago      GL     25.0 yes   311    311        14    10         8  200x11
+NAM Los Angeles  GL     25.0 yes   248    248        18    12         6  200x13
+AFR Lagos        GL     25.0 yes    61     61         1     1         0  200x2
+AFR Nairobi      GL     25.0 yes    16     16         9     9         0  200x10
+AFR Cairo        EU      7.4  no     1      1         1     1         0  200x2
+ASI Tokyo        GL     25.0 yes   148    148       145   128       119  200x129
+ASI Delhi        GL     25.0 yes    98     98        83    81        42  200x82
+ASI Jakarta      GL     25.0 yes    27     27         7     7         0  200x8
+
+208 admitted stations across 8 cities
+```
+
+### Outcome 1 fired for AFR, and the funnel makes the claim sharper
+
+AFR returned zero again, from chains that were entirely 200 with no 429, so under
+the pre-committed reading **the contract's zero is confirmed**. Section 1 of the
+contract says AFR has no reference-grade station reporting PM2.5 across the
+capture window. That is exactly what the funnel shows, three cities over, and it
+needs no softening and no correction.
+
+What the funnel adds is the reason, which the contract could not state because it
+did not have a funnel:
+
+> AFR is monitored. Sixty-one fixed stations near Lagos, sixteen near Nairobi,
+> twenty-seven near Jakarta. None of it is usable by this threshold, which rests
+> on a measurement uncertainty derived for reference methods. Nairobi is the
+> sharpest case: nine reference-grade PM2.5 stations, none covering the capture
+> window. That is a currency problem rather than an absence, and it is a finding
+> about the available data rather than about the continent.
+
+"AFR has no monitoring" would have been false. "AFR has no monitoring this
+threshold can use" is true and is the stronger statement. That difference is what
+the re-verification bought for its 300 calls, and it is why the recheck was worth
+running even though its headline outcome was confirmation.
+
+### Two corrections to the contract's evidence, both attributable to the probe
+
+**Madrid is admitted, with six stations.** The contract excluded it.
+
+The attribution matters more than the number, so the reasoning is recorded rather
+than only the conclusion. Seven cities reproduced **exactly**: Amsterdam 5, Berlin
+7, New York 15, Chicago 8, Los Angeles 6, Tokyo 119, Delhi 42. Drift in a station
+network scatters; it does not leave seven figures untouched while moving one city
+from zero to six. And Madrid's admitted sensors report `datetimeFirst` in 2016 and
+2023, so they were not newly installed. Two of them were queried directly, outside
+the script, and both bracket the capture window. The earlier probe was wrong; the
+world was not.
+
+**Cairo's radius was wrong, in the permissive direction.** Cairo resolves to the
+European model domain, giving 7.4 km, not the global domain at the 25 km cap. The
+pre-flight assumed the domain from the region label instead of probing it. Cairo
+returned zero under both radii, so the error made the test easier and Cairo failed
+it anyway, which is stronger evidence than an uncharacterised error would be.
+
+**The contract is not amended, and here the outcome-versus-input distinction is
+load-bearing for the first time.** Its admitted-city block is labelled an outcome
+of the frozen rules rather than an input to them. Correcting it therefore corrects
+evidence and moves no predicate: no threshold, no radius rule, no admission rule
+and no claim changes. Had that block been written as configuration, this would
+have been an amendment to a frozen file and there would have been no clean way to
+make it.
+
+### An apparatus defect, and it was correlated with the measurement
+
+The first run reported eight of twelve cities void. Every non-200 was the
+Open-Meteo domain probe, which returns 400 for a point outside CAMS Europe. A 400
+there has two meanings, "the request failed" and "the point is outside this
+domain", and the criterion admitted only the first.
+
+The defect was not random. It voided **exactly** the cities in the global domain
+and none in the European one. Left uncaught it would have voided all of AFR and
+all of ASI while EUR passed cleanly, which reads as "the global domain could not
+be measured" and would have taken the headline with it. It is the same shape as
+writing a two-way test over a space that has three regions: the discriminator is
+sound on the cases its author pictured and silently wrong on the one they did not.
+
+Scoped to the station chain at 6199998 and re-run. The re-run is what the
+pre-committed reading required for a void city in any case.
+
+### Carried forward, not acted on
+
+- Eight admitted cities rather than seven, so D2's holdout ceiling moves from 1176
+  to 1344 city-windows. The evaluability precondition still stands with margin, and
+  the realised count, after per-window coverage is applied, remains unestablished.
+- EUR now rests on three cities rather than two, so the split between the 11 km
+  domain and the 45 km one is three against five. That changes the per-domain
+  reporting, not the rate D2 binds on.
+
 ## Post-project findings, recorded and not built
 
 Things worth fixing that this project will not fix. Section 2 of the contract

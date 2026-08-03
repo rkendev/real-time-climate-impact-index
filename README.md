@@ -129,6 +129,30 @@ The specification set is meant to be read in order.
 
 Every functional requirement (FR-), non-functional requirement (NFR-), use case (UC-), entity (E-), invariant (INV-), and acceptance test (AT-) has a stable ID. Downstream code, tests, and infrastructure reference these IDs. A change to behavior starts as an edit to the ID that owns it, not as a code patch. The repository name is brand-neutral and the Python package is `climate_index`, consistent with the project's clean-commit-trail rule.
 
+## What the station coverage actually looks like
+
+Stated above any number this project reports, because it is the strongest thing
+the work has established and it is a limitation rather than a result.
+
+AFR is monitored. Sixty-one fixed stations sit near Lagos, sixteen near Nairobi,
+twenty-seven near Jakarta. **None of it is usable by the comparison this project
+makes**, which rests on a measurement uncertainty derived for reference methods.
+Nairobi is the sharpest case: nine reference-grade PM2.5 stations, none of which
+covers the measurement window. That is a data-currency problem rather than an
+absence, and it is a finding about the available data rather than about the
+continent.
+
+The consequence is that one of the index's four regions cannot be independently
+checked at all and carries the lower provenance tier permanently. Any rate this
+project reports describes the eight cities that could be checked, and it does not
+generalise to the ones that could not.
+
+The figures come from a re-verification over all twelve configured cities, at a
+compliant request rate, in which every station call returned 200 and none was
+throttled. It was run because the original figures came from a probe that had
+exceeded the published rate limit, and the details are in
+`adr/0009-openaq-disagreement-grading.md`.
+
 ## Data sources and attribution
 
 In real mode the readings come from [Open-Meteo](https://open-meteo.com/): the forecast API for temperature, precipitation, wind speed, and cloud cover, and the air quality API for aerosol optical depth. Both are free for non-commercial use and need no API key, and the demo's request volume sits far below the free tier.
