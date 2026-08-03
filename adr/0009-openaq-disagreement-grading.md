@@ -165,6 +165,42 @@ which are metadata spanning the holdout period, and no measured value was
 retrieved. The contract states this next to the seal paragraph so that the
 question does not have to be reopened later.
 
+## Follow-up: a factual error in the contract, found at implementation
+
+Recorded 2026-08-03, after the freeze.
+
+Section 2 of `PREREGISTRATION.md` at b81f1c9 states that the new field on
+`SatelliteEvent` "propagates to the DuckDB column tuple, the Iceberg schema, the
+DynamoDB item shape and the dashboard". The four named surfaces are right. **The
+carrier named is wrong.** All four carry `ClimateIndexRecord`, the aggregate row,
+whereas `SatelliteEvent` reaches only the raw store, which stores a JSON payload
+and needs no schema change at all. A field on the event does not reach those
+surfaces by itself.
+
+The consequence is not a scope expansion. A second field on the aggregate is what
+the contract's own stated propagation actually requires, in the same way the third
+`EventEnvelope` member followed from the frozen clause placing the station source
+behind the existing source Protocol. It is declared in `20_spec.md` E-5, and the
+reasoning is recorded in that document's change log as well as here.
+
+**The contract is not amended.** It contains a factual error about the existing
+code, discovered at implementation and corrected in the record. Its value rests on
+the freeze commit being untouched and its timestamp provably preceding any
+measurement, and the error concerns a description of the codebase rather than a
+predicate, a constant or a floor. This is the second such disclosure, after the
+attribution slip in section 4.5, and the handling is the same for the same reason.
+
+The reusable lesson is the more useful half, and it is the advisor's miss. The
+pre-flight verified the external citations and the API surfaces to the byte, down
+to which table binds when a document contradicts itself, and it verified that the
+pipeline carries an aerosol optical depth rather than a mass concentration. It then
+asserted this propagation path without checking it. **A pre-registration that
+describes an existing system has to verify its description of that system with the
+same rigour it applies to a published document.** The sentence was added
+specifically to stop scope being relitigated later, which made it load-bearing, and
+it was the one sentence in the file nobody checked. Rigour was applied where the
+sources were foreign and withheld where they were familiar.
+
 ## Alternatives considered
 
 Each was live, each was declined, and the point at which each was declined
