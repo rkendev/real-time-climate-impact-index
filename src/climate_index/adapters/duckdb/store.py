@@ -25,6 +25,7 @@ from typing import Any
 import duckdb
 
 from climate_index.adapters.duckdb._schema import (
+    ADDED_COLUMNS,
     AGGREGATE_COLUMNS,
     to_aware_utc,
     to_naive_utc,
@@ -48,10 +49,20 @@ class DuckDBAggregateStore:
                 dryness_index DOUBLE NOT NULL,
                 pollution_index DOUBLE NOT NULL,
                 confidence VARCHAR NOT NULL,
+                model_pm25_ugm3 DOUBLE,
                 PRIMARY KEY (region, window_start, window_end)
             )
             """
         )
+        # A database file written before a column existed is not altered by the
+        # CREATE above, and AGGREGATE_COLUMNS is shared by the writer and the
+        # reader, so a missing column would break both. Adding each one
+        # idempotently on open migrates an old file in place; existing rows read
+        # back NULL, which is the honest value for a measurement never taken.
+        for column, ddl_type in ADDED_COLUMNS:
+            self._con.execute(
+                f"ALTER TABLE climate_index ADD COLUMN IF NOT EXISTS {column} {ddl_type}"
+            )
 
     def upsert(self, record: Mapping[str, Any]) -> None:
         """Insert or replace the row for this natural key (idempotent, AT-5)."""
@@ -64,6 +75,8 @@ class DuckDBAggregateStore:
             float(record["dryness_index"]),
             float(record["pollution_index"]),
             str(record["confidence"]),
+            # Nullable: None stays None rather than becoming a number.
+            None if record.get("model_pm25_ugm3") is None else float(record["model_pm25_ugm3"]),
         ]
         placeholders = ", ".join(["?"] * len(AGGREGATE_COLUMNS))
         self._con.execute(f"INSERT OR REPLACE INTO climate_index VALUES ({placeholders})", values)

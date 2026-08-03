@@ -52,6 +52,12 @@ def to_item(record: Mapping[str, Any]) -> dict[str, Any]:
     }
     for field in _METRIC_FIELDS:
         item[field] = Decimal(str(float(record[field])))
+    # Optional, and omitted rather than written as a null: an absent attribute is
+    # how DynamoDB says "not recorded". Not a key attribute, so no table
+    # definition changes. Decimal(str(value)) never Decimal(value).
+    value = record.get("model_pm25_ugm3")
+    if value is not None:
+        item["model_pm25_ugm3"] = Decimal(str(float(value)))
     return item
 
 
@@ -65,6 +71,8 @@ def from_item(item: Mapping[str, Any]) -> dict[str, Any]:
     }
     for field in _METRIC_FIELDS:
         record[field] = float(item[field])
+    value = item.get("model_pm25_ugm3")
+    record["model_pm25_ugm3"] = None if value is None else float(value)
     return record
 
 

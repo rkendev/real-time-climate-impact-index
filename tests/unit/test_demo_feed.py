@@ -251,7 +251,12 @@ def test_real_mode_publishes_the_fetched_readings_untouched(
     fetched = [
         WeatherEvent(ts=ts, region="EUR", temperature_c=18.0, rainfall_mm=0.0, wind_speed_ms=3.0),
         SatelliteEvent(
-            ts=ts, region="EUR", cloud_cover_pct=50.0, vegetation_index=0.5, aerosol_index=0.2
+            ts=ts,
+            region="EUR",
+            cloud_cover_pct=50.0,
+            vegetation_index=0.5,
+            aerosol_index=0.2,
+            model_pm25_ugm3=12.0,
         ),
     ]
 

@@ -231,8 +231,13 @@ class Settings(BaseSettings):
     # page can explain a grade without computing one.
     confidence_tier_glosses: dict[str, str] = Field(
         default_factory=lambda: {
-            "MEASURED": "both stream types present in the window",
-            "INFERRED": "one stream type only, so a component is imputed",
+            # UC-5: these name the two streams the grader reads rather than
+            # saying "both", which stopped being accurate when E-4 declared a
+            # third. Station observations feed the provenance tier, never this
+            # grade. A gloss that miscounts the streams misdescribes the grade to
+            # the one reader who cannot check it.
+            "MEASURED": "weather and satellite streams both present in the window",
+            "INFERRED": "only one of the weather and satellite streams, so a component is imputed",
             "AMBIGUOUS": "fewer validated events than the sparsity threshold",
         }
     )

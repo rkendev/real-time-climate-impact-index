@@ -111,6 +111,10 @@ class IcebergAggregateStore:
             NestedField(6, "dryness_index", DoubleType(), required=True),
             NestedField(7, "pollution_index", DoubleType(), required=True),
             NestedField(8, "confidence", StringType(), required=True),
+            # Field ids 1 to 8 are stable and must never be reused or reordered.
+            # Optional, because rows written before this field existed carry no
+            # value and backfilling the shipped index is out of scope.
+            NestedField(9, "model_pm25_ugm3", DoubleType(), required=False),
             identifier_field_ids=[1, 2, 3],
         )
 
@@ -141,6 +145,10 @@ class IcebergAggregateStore:
             "dryness_index": float(record["dryness_index"]),
             "pollution_index": float(record["pollution_index"]),
             "confidence": str(record["confidence"]),
+            # Nullable: None stays None rather than becoming a number.
+            "model_pm25_ugm3": (
+                None if record.get("model_pm25_ugm3") is None else float(record["model_pm25_ugm3"])
+            ),
         }
         arrow_table = pa.Table.from_pylist([row], schema=table.schema().as_arrow())
         table.upsert(arrow_table)
@@ -173,4 +181,6 @@ class IcebergAggregateStore:
         }
         for field in _METRIC_FIELDS:
             record[field] = float(row[field])
+        value = row.get("model_pm25_ugm3")
+        record["model_pm25_ugm3"] = None if value is None else float(value)
         return record

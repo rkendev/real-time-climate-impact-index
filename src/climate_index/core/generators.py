@@ -28,6 +28,10 @@ _WIND_SPEED_MS_RANGE = (0.0, 30.0)
 _CLOUD_COVER_PCT_RANGE = (0.0, 100.0)
 _VEGETATION_INDEX_RANGE = (-1.0, 1.0)
 _AEROSOL_INDEX_RANGE = (0.0, 5.0)
+# Model PM2.5 in micrograms per cubic metre. No schema upper bound, so the
+# plausible sampling range lives here like the aerosol one above. The span
+# brackets what the provider returns across the configured cities.
+_MODEL_PM25_UGM3_RANGE = (0.0, 120.0)
 
 
 def _now_utc() -> datetime:
@@ -53,4 +57,5 @@ def generate_satellite_event(region: str, *, ts: datetime | None = None) -> Sate
         cloud_cover_pct=random.uniform(*_CLOUD_COVER_PCT_RANGE),
         vegetation_index=random.uniform(*_VEGETATION_INDEX_RANGE),
         aerosol_index=random.uniform(*_AEROSOL_INDEX_RANGE),
+        model_pm25_ugm3=random.uniform(*_MODEL_PM25_UGM3_RANGE),
     )

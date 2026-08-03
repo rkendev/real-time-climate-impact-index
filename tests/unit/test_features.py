@@ -38,6 +38,7 @@ def _satellite(
         cloud_cover_pct=cloud_cover_pct,
         vegetation_index=vegetation_index,
         aerosol_index=aerosol_index,
+        model_pm25_ugm3=12.0,
     )
 
 

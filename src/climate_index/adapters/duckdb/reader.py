@@ -31,16 +31,32 @@ class DuckDBReadOnlyAggregateStore:
         # never creates the store; it only reads what a run produced.
         self._con = duckdb.connect(str(db_path), read_only=True)
 
+    def _present_columns(self) -> tuple[str, ...]:
+        """The aggregate columns this file actually has, in canonical order.
+
+        A file written before a column was added does not have it, and this
+        reader is read-only by invariant (INV-2) so it cannot migrate the file
+        the way the writer does. Selecting the intersection lets the dashboard
+        read an older store instead of failing to bind, and the absent column is
+        reported as None rather than as a value.
+        """
+        found = {row[0] for row in self._con.execute("DESCRIBE climate_index").fetchall()}
+        return tuple(column for column in AGGREGATE_COLUMNS if column in found)
+
     def read_region_series(self, region: str) -> Sequence[Mapping[str, Any]]:
         """Return the region's rows ordered by window start (read-only, INV-2)."""
-        columns = ", ".join(AGGREGATE_COLUMNS)
+        present = self._present_columns()
+        missing = [column for column in AGGREGATE_COLUMNS if column not in present]
         result = self._con.execute(
-            f"SELECT {columns} FROM climate_index WHERE region = ? ORDER BY window_start",
+            f"SELECT {', '.join(present)} FROM climate_index "
+            "WHERE region = ? ORDER BY window_start",
             [region],
         )
         rows: list[Mapping[str, Any]] = []
         for row in result.fetchall():
-            record = dict(zip(AGGREGATE_COLUMNS, row, strict=True))
+            record = dict(zip(present, row, strict=True))
+            for column in missing:
+                record[column] = None
             record["window_start"] = to_aware_utc(record["window_start"])
             record["window_end"] = to_aware_utc(record["window_end"])
             rows.append(record)

@@ -104,6 +104,14 @@ class SatelliteEvent(BaseModel):
     cloud_cover_pct: float = Field(ge=0, le=100)
     vegetation_index: float = Field(ge=-1, le=1)
     aerosol_index: float
+    # E-3: the model analysis of surface PM2.5 mass concentration. Required, so
+    # the adapter refuses to emit rather than substituting, which is what carries
+    # ADR-0007's no-fabrication rule. Non-negative because a mass concentration
+    # cannot be below zero; the provider was probed over 26496 hours across the
+    # twelve configured cities and returned no negative and no null, with a
+    # minimum of exactly zero. Unlike a station reading, which can go negative
+    # near the detection limit, this is a modelled quantity floored at zero.
+    model_pm25_ugm3: float = Field(ge=0)
 
 
 class EventEnvelope(BaseModel):
@@ -150,6 +158,12 @@ class ClimateIndexRecord(BaseModel):
     dryness_index: float
     pollution_index: float
     confidence: Confidence
+    # E-5: the mean model PM2.5 across the window's satellite events. Nullable,
+    # because a window with no satellite event has none and because every row
+    # written before this field existed carries none; backfilling the shipped
+    # index is out of scope. A reported summary, not the input to the
+    # disagreement comparison, which is evaluated at city granularity.
+    model_pm25_ugm3: float | None = None
 
 
 class QuarantineRecord(BaseModel):

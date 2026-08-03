@@ -47,7 +47,7 @@ WEATHER_OK: dict[str, Any] = {
 }
 AIR_OK: dict[str, Any] = {
     "utc_offset_seconds": 0,
-    "current": {"time": NAIVE_TS, "interval": 3600, "aerosol_optical_depth": 0.18},
+    "current": {"time": NAIVE_TS, "interval": 3600, "aerosol_optical_depth": 0.18, "pm2_5": 9.4},
 }
 
 ONE_CITY = {"EUR": [CityLocation(name="Amsterdam", latitude=52.3676, longitude=4.9041)]}
@@ -242,7 +242,7 @@ def test_the_request_asks_for_the_verified_variables_and_units() -> None:
     assert weather_url.params["timezone"] == "UTC"
 
     air_url = next(u for u in seen if str(u).startswith(AIR_URL))
-    assert air_url.params["current"] == "aerosol_optical_depth"
+    assert air_url.params["current"] == "aerosol_optical_depth,pm2_5"
     assert air_url.params["timezone"] == "UTC"
 
 
@@ -276,6 +276,7 @@ HOURLY_AIR: dict[str, Any] = {
     "hourly": {
         "time": ["2026-07-22T09:00", "2026-07-22T10:00", "2026-07-22T11:00"],
         "aerosol_optical_depth": [0.20, 0.21, 0.22],
+        "pm2_5": [9.1, 9.2, 9.3],
     },
 }
 CUTOFF = datetime(2026, 7, 22, 11, 30, tzinfo=UTC)
@@ -337,6 +338,7 @@ def test_history_aligns_the_two_series_by_timestamp_not_by_position() -> None:
         "hourly": {
             "time": ["2026-07-22T10:00", "2026-07-22T11:00"],
             "aerosol_optical_depth": [0.21, 0.22],
+            "pm2_5": [9.2, 9.3],
         },
     }
     source = _source(_router(HOURLY_WEATHER, offset_air))
@@ -360,3 +362,63 @@ def test_history_asks_for_past_days() -> None:
     for url in seen:
         assert url.params["past_days"] == "2"
         assert "hourly" in url.params
+
+
+def test_a_missing_pm25_drops_the_satellite_event() -> None:
+    """The no-fabrication rule of ADR-0007, applied to the new required field."""
+    air = {**AIR_OK, "current": {k: v for k, v in AIR_OK["current"].items() if k != "pm2_5"}}
+    source = _source(_router(WEATHER_OK, air))
+    events = source.fetch_tick()
+
+    assert [type(e).__name__ for e in events] == ["WeatherEvent"]
+    assert source.missing_count == 1
+
+
+def test_a_null_pm25_drops_the_satellite_event() -> None:
+    air = {**AIR_OK, "current": {**AIR_OK["current"], "pm2_5": None}}
+    source = _source(_router(WEATHER_OK, air))
+    events = source.fetch_tick()
+
+    assert [type(e).__name__ for e in events] == ["WeatherEvent"]
+    assert source.missing_count == 1
+
+
+def test_the_satellite_event_carries_the_model_pm25() -> None:
+    source = _source(_router(WEATHER_OK, AIR_OK))
+    satellite = next(e for e in source.fetch_tick() if isinstance(e, SatelliteEvent))
+    assert satellite.model_pm25_ugm3 == 9.4
+
+
+def test_a_negative_pm25_is_counted_as_a_range_rejection_not_a_missing_field() -> None:
+    """A constraint violation and absent data are different causes.
+
+    Folding them together would make a systematic rejection look like sparsity,
+    which is the same defect as a share computed against the wrong denominator.
+    The provider was probed over 26496 hours across the twelve configured cities
+    and returned no negative value, so this counter is expected to stay at zero in
+    production; the test exists so that a zero is evidence rather than an
+    assumption.
+    """
+    air = {**AIR_OK, "current": {**AIR_OK["current"], "pm2_5": -1.0}}
+    events: list[Any] = []
+    reasons: list[str] = []
+
+    class _Recorder:
+        def event(self, name: str, **fields: Any) -> None:
+            if name == "source_reading_unavailable":
+                reasons.append(str(fields.get("reason")))
+
+    source = _source(_router(WEATHER_OK, air), logger=_Recorder())
+    events = source.fetch_tick()
+
+    assert [type(e).__name__ for e in events] == ["WeatherEvent"]
+    assert reasons == ["range_rejected"]
+
+
+def test_a_null_pm25_hour_drops_only_that_satellite_slot() -> None:
+    holed = {**HOURLY_AIR, "hourly": {**HOURLY_AIR["hourly"], "pm2_5": [9.1, None, 9.3]}}
+    source = _source(_router(HOURLY_WEATHER, holed))
+    events = source.fetch_history(not_after=CUTOFF)
+
+    assert [e.ts.hour for e in events if isinstance(e, WeatherEvent)] == [9, 10, 11]
+    assert [e.ts.hour for e in events if isinstance(e, SatelliteEvent)] == [9, 11]

@@ -58,10 +58,20 @@ def test_weather_event_rejects_negative_nonneg_fields(field: str) -> None:
 
 def test_satellite_event_accepts_boundary_values() -> None:
     low = SatelliteEvent(
-        ts=UTC_TS, region="AFR", cloud_cover_pct=0.0, vegetation_index=-1.0, aerosol_index=0.0
+        ts=UTC_TS,
+        region="AFR",
+        cloud_cover_pct=0.0,
+        vegetation_index=-1.0,
+        aerosol_index=0.0,
+        model_pm25_ugm3=12.0,
     )
     high = SatelliteEvent(
-        ts=UTC_TS, region="AFR", cloud_cover_pct=100.0, vegetation_index=1.0, aerosol_index=9.9
+        ts=UTC_TS,
+        region="AFR",
+        cloud_cover_pct=100.0,
+        vegetation_index=1.0,
+        aerosol_index=9.9,
+        model_pm25_ugm3=12.0,
     )
     assert low.cloud_cover_pct == 0.0
     assert high.vegetation_index == 1.0
@@ -74,6 +84,9 @@ def test_satellite_event_accepts_boundary_values() -> None:
         ("cloud_cover_pct", -0.1),
         ("vegetation_index", 1.5),
         ("vegetation_index", -1.5),
+        # E-3: a mass concentration cannot be negative. Zero is a real value the
+        # provider returns, so the bound is ge and not gt.
+        ("model_pm25_ugm3", -0.1),
     ],
 )
 def test_satellite_event_rejects_out_of_range(field: str, value: float) -> None:
@@ -83,6 +96,7 @@ def test_satellite_event_rejects_out_of_range(field: str, value: float) -> None:
         "cloud_cover_pct": 50.0,
         "vegetation_index": 0.0,
         "aerosol_index": 1.0,
+        "model_pm25_ugm3": 12.0,
     }
     kwargs[field] = value
     with pytest.raises(ValidationError):
@@ -135,7 +149,12 @@ def test_envelope_wrap_and_json_round_trip() -> None:
 
 def test_satellite_envelope_reports_satellite_type() -> None:
     event = SatelliteEvent(
-        ts=UTC_TS, region="NAM", cloud_cover_pct=10.0, vegetation_index=0.2, aerosol_index=1.0
+        ts=UTC_TS,
+        region="NAM",
+        cloud_cover_pct=10.0,
+        vegetation_index=0.2,
+        aerosol_index=1.0,
+        model_pm25_ugm3=12.0,
     )
     envelope = EventEnvelope.wrap(event)
     assert envelope.event_type is EventType.SATELLITE

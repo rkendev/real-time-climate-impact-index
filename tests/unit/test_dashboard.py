@@ -495,7 +495,8 @@ def test_the_real_page_renders_end_to_end_from_a_seeded_store(
 
     assert not app.exception, app.exception
     assert app.title[0].value == "Real-Time Climate Impact Index"
-    assert len(app.metric) == 3
+    # Four tiles: index, label, confidence, and the model PM2.5 value (E-5).
+    assert len(app.metric) == 4
     assert [expander.label for expander in app.expander] == [
         "What the tiers and labels mean",
         "About / how it works",
@@ -528,3 +529,83 @@ def test_the_real_page_renders_end_to_end_from_a_seeded_store(
     strip_colors = specs[1]["encoding"]["color"]["scale"]
     assert strip_colors["domain"] == list(settings.confidence_tier_colors)
     assert strip_colors["range"] == list(settings.confidence_tier_colors.values())
+
+
+def test_a_null_model_pm25_renders_absent_and_never_a_number() -> None:
+    """The guard that stops a fabricated value reaching the page.
+
+    A null shown as a number is a fabricated measurement, which is the D3 subject
+    in miniature. Zero is a real concentration the provider returns, so an absent
+    value must not collapse onto it. This guard is proven red by seeding `or 0.0`
+    at the render site; see the companion test below.
+    """
+    module = _load_dashboard_module()
+    view = module.build_region_view(
+        [
+            {
+                "region": "EUR",
+                "window_start": datetime(2026, 8, 1, 12, 0, tzinfo=UTC),
+                "window_end": datetime(2026, 8, 1, 12, 30, tzinfo=UTC),
+                "impact_index": 40.0,
+                "temperature_anomaly": 1.0,
+                "dryness_index": 0.2,
+                "pollution_index": 0.3,
+                "confidence": "MEASURED",
+                "model_pm25_ugm3": None,
+            }
+        ],
+        "EUR",
+    )
+    assert view.model_pm25_series == (None,)
+    rendered = module.model_pm25_display(view)
+    assert rendered == module.ABSENT_MARKER
+    # No numeral of any kind, so a zero cannot hide in the string.
+    assert not any(character.isdigit() for character in rendered)
+
+
+def test_a_present_model_pm25_renders_as_its_value() -> None:
+    module = _load_dashboard_module()
+    view = module.build_region_view(
+        [
+            {
+                "region": "EUR",
+                "window_start": datetime(2026, 8, 1, 12, 0, tzinfo=UTC),
+                "window_end": datetime(2026, 8, 1, 12, 30, tzinfo=UTC),
+                "impact_index": 40.0,
+                "temperature_anomaly": 1.0,
+                "dryness_index": 0.2,
+                "pollution_index": 0.3,
+                "confidence": "MEASURED",
+                "model_pm25_ugm3": 0.0,
+            }
+        ],
+        "EUR",
+    )
+    # A genuine zero renders as a zero, which is what makes the absent marker
+    # meaningful rather than a synonym for it.
+    assert module.model_pm25_display(view) == "0.0"
+
+
+def test_the_confidence_glosses_name_the_two_streams_they_read() -> None:
+    """UC-5: "both stream types" stopped being accurate when E-4 declared a third.
+
+    Asserted against the committed default rather than through get_settings(),
+    which reads any local .env and would make this test report the operator's
+    machine instead of the repository.
+    """
+    glosses = Settings(_env_file=None).confidence_tier_glosses
+    assert "both stream types" not in glosses["MEASURED"]
+    assert "weather" in glosses["MEASURED"] and "satellite" in glosses["MEASURED"]
+    assert "weather" in glosses["INFERRED"] and "satellite" in glosses["INFERRED"]
+
+
+def test_the_tracked_env_example_carries_the_same_glosses() -> None:
+    """.env.example is tracked and overrides the default, so it must not drift."""
+    example = Path(__file__).resolve().parents[2] / ".env.example"
+    line = next(
+        raw
+        for raw in example.read_text().splitlines()
+        if raw.startswith("CII_CONFIDENCE_TIER_GLOSSES=")
+    )
+    glosses = json.loads(line.split("=", 1)[1])
+    assert glosses == Settings(_env_file=None).confidence_tier_glosses

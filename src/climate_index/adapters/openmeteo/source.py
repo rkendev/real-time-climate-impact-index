@@ -60,7 +60,7 @@ if TYPE_CHECKING:  # pragma: no cover - typing only, never imported at runtime
 # Forecast endpoint current-block variables, in request order.
 _WEATHER_CURRENT = ("temperature_2m", "precipitation", "wind_speed_10m", "cloud_cover")
 # Air quality endpoint current-block variables.
-_AIR_QUALITY_CURRENT = ("aerosol_optical_depth",)
+_AIR_QUALITY_CURRENT = ("aerosol_optical_depth", "pm2_5")
 
 # Shared query parameters. Wind in metres per second so no conversion is needed,
 # and UTC so the returned clock needs no zone lookup (only the explicit tzinfo
@@ -77,6 +77,17 @@ _REASON_MALFORMED = "malformed_payload"
 _REASON_MISSING_FIELD = "missing_field"
 _REASON_OFFSET = "non_utc_offset"
 _REASON_SCHEMA = "schema_rejected"
+# A value that arrived and parsed but fell outside a schema bound. Separated from
+# _REASON_SCHEMA, and from _REASON_MISSING_FIELD above, because a systematic
+# constraint rejection and genuinely absent data are different causes, and folding
+# them together would make the former look like sparsity.
+_REASON_RANGE = "range_rejected"
+
+
+def _rejection_reason(error: ValidationError) -> str:
+    """Whether a rejection was a bound violation or any other schema failure."""
+    bounds = {"greater_than", "greater_than_equal", "less_than", "less_than_equal"}
+    return _REASON_RANGE if any(e["type"] in bounds for e in error.errors()) else _REASON_SCHEMA
 
 
 class OpenMeteoEventSource:
@@ -296,6 +307,7 @@ class OpenMeteoEventSource:
                 satellite = self._build_satellite(
                     cloud_cover=weather_block.get("cloud_cover"),
                     aerosol=air_block.get("aerosol_optical_depth"),
+                    pm2_5=air_block.get("pm2_5"),
                     ts=air_ts,
                     region=region,
                     city=city.name,
@@ -356,8 +368,8 @@ class OpenMeteoEventSource:
                 rainfall_mm=values["precipitation"],
                 wind_speed_ms=values["wind_speed_10m"],
             )
-        except ValidationError:
-            self._skip(_REASON_SCHEMA, region, city, "weather")
+        except ValidationError as error:
+            self._skip(_rejection_reason(error), region, city, "weather")
             return None
 
     def _build_satellite(
@@ -365,13 +377,14 @@ class OpenMeteoEventSource:
         *,
         cloud_cover: Any,
         aerosol: Any,
+        pm2_5: Any,
         ts: datetime,
         region: str,
         city: str,
     ) -> SatelliteEvent | None:
         values = _required_floats(
-            {"cloud_cover": cloud_cover, "aerosol_optical_depth": aerosol},
-            ("cloud_cover", "aerosol_optical_depth"),
+            {"cloud_cover": cloud_cover, "aerosol_optical_depth": aerosol, "pm2_5": pm2_5},
+            ("cloud_cover", "aerosol_optical_depth", "pm2_5"),
         )
         if values is None:
             self._skip(_REASON_MISSING_FIELD, region, city, "satellite")
@@ -384,9 +397,10 @@ class OpenMeteoEventSource:
                 # E-3: a configured monthly reference, not a measurement.
                 vegetation_index=self._monthly_vegetation[region][ts.month - 1],
                 aerosol_index=values["aerosol_optical_depth"],
+                model_pm25_ugm3=values["pm2_5"],
             )
-        except ValidationError:
-            self._skip(_REASON_SCHEMA, region, city, "satellite")
+        except ValidationError as error:
+            self._skip(_rejection_reason(error), region, city, "satellite")
             return None
 
     def fetch_history(
@@ -459,14 +473,21 @@ class OpenMeteoEventSource:
         if weather_hourly is None:
             return events
 
-        aerosol_by_time: dict[str, float] = {}
+        # Both air quality variables are keyed by hour. A slot needs both, so it is
+        # kept only when neither is missing: the per-slot no-fabrication rule.
+        air_by_time: dict[str, tuple[float, float]] = {}
         air_hourly = self._hourly_block(air_payload, region, city, "satellite")
         if air_hourly is not None:
             times = air_hourly.get("time") or []
-            values = air_hourly.get("aerosol_optical_depth") or []
-            for raw_time, value in zip(times, values, strict=False):
-                if isinstance(raw_time, str) and isinstance(value, int | float):
-                    aerosol_by_time[raw_time] = float(value)
+            aerosols = air_hourly.get("aerosol_optical_depth") or []
+            pm25s = air_hourly.get("pm2_5") or []
+            for raw_time, aerosol_value, pm25_value in zip(times, aerosols, pm25s, strict=False):
+                if (
+                    isinstance(raw_time, str)
+                    and isinstance(aerosol_value, int | float)
+                    and isinstance(pm25_value, int | float)
+                ):
+                    air_by_time[raw_time] = (float(aerosol_value), float(pm25_value))
 
         times = weather_hourly.get("time") or []
         for index, raw_time in enumerate(times):
@@ -491,13 +512,15 @@ class OpenMeteoEventSource:
             if weather is not None:
                 events.append(weather)
 
-            aerosol = aerosol_by_time.get(raw_time)
-            if aerosol is None:
+            air_values = air_by_time.get(raw_time)
+            if air_values is None:
                 self._skip(_REASON_MISSING_FIELD, region, city, "satellite", hour=raw_time)
                 continue
+            aerosol, pm2_5 = air_values
             satellite = self._build_satellite(
                 cloud_cover=slot.get("cloud_cover"),
                 aerosol=aerosol,
+                pm2_5=pm2_5,
                 ts=ts,
                 region=region,
                 city=city,

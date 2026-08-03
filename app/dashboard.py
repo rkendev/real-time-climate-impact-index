@@ -80,6 +80,9 @@ class RegionView:
     window_ends: tuple[datetime, ...]
     impact_series: tuple[float, ...]
     confidence_series: tuple[str, ...]
+    # E-5, nullable. A row written before the field existed, or a window with no
+    # satellite event, carries None. Rendered as absent, never as a number.
+    model_pm25_series: tuple[float | None, ...]
     current_value: float | None
     label: str | None
     confidence: str | None
@@ -94,11 +97,17 @@ def build_region_view(rows: Sequence[Mapping[str, Any]], region: str) -> RegionV
     index is computed and no grade is assigned here.
     """
     if not rows:
-        return RegionView(region, (), (), (), (), None, None, None)
+        return RegionView(region, (), (), (), (), (), None, None, None)
     window_starts = tuple(row["window_start"] for row in rows)
     window_ends = tuple(row["window_end"] for row in rows)
     impact_series = tuple(float(row["impact_index"]) for row in rows)
     confidence_series = tuple(str(row["confidence"]) for row in rows)
+    # No "or 0.0" anywhere on this path: a null is absent, and a null shown as a
+    # number is a fabricated value.
+    model_pm25_series = tuple(
+        None if row.get("model_pm25_ugm3") is None else float(row["model_pm25_ugm3"])
+        for row in rows
+    )
     current_value = impact_series[-1]
     return RegionView(
         region=region,
@@ -106,6 +115,7 @@ def build_region_view(rows: Sequence[Mapping[str, Any]], region: str) -> RegionV
         window_ends=window_ends,
         impact_series=impact_series,
         confidence_series=confidence_series,
+        model_pm25_series=model_pm25_series,
         current_value=current_value,
         label=verbal_label(current_value),
         confidence=confidence_series[-1],
@@ -131,6 +141,21 @@ def band_legend_lines(settings: Settings) -> tuple[str, ...]:
 def tier_legend_lines(settings: Settings) -> tuple[str, ...]:
     """Name each confidence tier with what drives it (NFR-DQ2), from config."""
     return tuple(f"{tier}: {gloss}" for tier, gloss in settings.confidence_tier_glosses.items())
+
+
+# What a window with no model PM2.5 value shows. A word, never a number and never
+# a blank that reads as zero: the value was not recorded, which is a different
+# statement from the value being zero, and zero is a concentration the provider
+# does return.
+ABSENT_MARKER = "not recorded"
+
+
+def model_pm25_display(view: RegionView) -> str:
+    """The newest window's model PM2.5, or the absent marker when it has none."""
+    if not view.model_pm25_series:
+        return ABSENT_MARKER
+    value = view.model_pm25_series[-1]
+    return ABSENT_MARKER if value is None else f"{value:.1f}"
 
 
 def tier_gloss(confidence: str | None, settings: Settings) -> str:
@@ -315,6 +340,13 @@ def render(store: ReadOnlyAggregateStore, settings: Settings) -> None:
     label.metric("Label", view.label)
     confidence.metric("Confidence", view.confidence)
     confidence.caption(tier_gloss(view.confidence, settings))
+
+    st.metric("Model PM2.5, micrograms per cubic metre", model_pm25_display(view))
+    st.caption(
+        "The model analysis for the newest window. It is reported beside the index, "
+        "never folded into it: the pollution component is computed from aerosol "
+        f"optical depth. A window with no reading shows {ABSENT_MARKER}."
+    )
 
     st.subheader("Impact index over recent windows")
     st.altair_chart(index_chart(view, settings), width="stretch")

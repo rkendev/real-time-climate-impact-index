@@ -25,7 +25,14 @@ AGGREGATE_COLUMNS = (
     "dryness_index",
     "pollution_index",
     "confidence",
+    "model_pm25_ugm3",
 )
+
+# Columns added after the table first shipped, with their DDL type. Existing
+# database files predate them, so the store adds each one idempotently on open
+# rather than relying on CREATE TABLE IF NOT EXISTS, which does not alter a table
+# that already exists. Appended to AGGREGATE_COLUMNS above in the same order.
+ADDED_COLUMNS: tuple[tuple[str, str], ...] = (("model_pm25_ugm3", "DOUBLE"),)
 
 
 def to_naive_utc(value: datetime | str) -> datetime:

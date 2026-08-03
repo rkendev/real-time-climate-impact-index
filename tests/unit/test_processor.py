@@ -43,7 +43,12 @@ def test_processor_writes_one_record_per_region(tmp_path: Path) -> None:
         _publish(
             transport,
             SatelliteEvent(
-                ts=TS, region=region, cloud_cover_pct=50.0, vegetation_index=0.0, aerosol_index=1.0
+                ts=TS,
+                region=region,
+                cloud_cover_pct=50.0,
+                vegetation_index=0.0,
+                aerosol_index=1.0,
+                model_pm25_ugm3=12.0,
             ),
         )
 
@@ -72,7 +77,12 @@ def test_series_is_ordered_across_windows(tmp_path: Path) -> None:
         _publish(
             transport,
             SatelliteEvent(
-                ts=ts, region="EUR", cloud_cover_pct=50.0, vegetation_index=0.0, aerosol_index=1.0
+                ts=ts,
+                region="EUR",
+                cloud_cover_pct=50.0,
+                vegetation_index=0.0,
+                aerosol_index=1.0,
+                model_pm25_ugm3=12.0,
             ),
         )
 
@@ -96,7 +106,12 @@ def test_quarantined_event_never_becomes_an_aggregate(tmp_path: Path) -> None:
     _publish(
         transport,
         SatelliteEvent(
-            ts=TS, region="EUR", cloud_cover_pct=50.0, vegetation_index=0.0, aerosol_index=1.0
+            ts=TS,
+            region="EUR",
+            cloud_cover_pct=50.0,
+            vegetation_index=0.0,
+            aerosol_index=1.0,
+            model_pm25_ugm3=12.0,
         ),
     )
     transport.publish("AFR", {"event_type": "storm", "key": "AFR", "payload": {"region": "AFR"}})
@@ -121,7 +136,12 @@ def test_replay_through_processor_does_not_duplicate(tmp_path: Path) -> None:
     _publish(
         transport,
         SatelliteEvent(
-            ts=TS, region="EUR", cloud_cover_pct=50.0, vegetation_index=0.0, aerosol_index=1.0
+            ts=TS,
+            region="EUR",
+            cloud_cover_pct=50.0,
+            vegetation_index=0.0,
+            aerosol_index=1.0,
+            model_pm25_ugm3=12.0,
         ),
     )
 

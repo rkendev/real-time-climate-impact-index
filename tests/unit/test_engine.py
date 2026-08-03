@@ -32,7 +32,12 @@ def _weather(
 
 def _satellite(region: str, ts: datetime = TS) -> SatelliteEvent:
     return SatelliteEvent(
-        ts=ts, region=region, cloud_cover_pct=50.0, vegetation_index=0.0, aerosol_index=1.0
+        ts=ts,
+        region=region,
+        cloud_cover_pct=50.0,
+        vegetation_index=0.0,
+        aerosol_index=1.0,
+        model_pm25_ugm3=12.0,
     )
 
 
@@ -41,10 +46,20 @@ def test_one_record_per_region_per_window_with_expected_values() -> None:
         _weather("EUR", 20.0, 0.0),
         _weather("EUR", 24.0, 10.0),
         SatelliteEvent(
-            ts=TS, region="EUR", cloud_cover_pct=50.0, vegetation_index=0.0, aerosol_index=1.0
+            ts=TS,
+            region="EUR",
+            cloud_cover_pct=50.0,
+            vegetation_index=0.0,
+            aerosol_index=1.0,
+            model_pm25_ugm3=12.0,
         ),
         SatelliteEvent(
-            ts=TS, region="EUR", cloud_cover_pct=30.0, vegetation_index=0.2, aerosol_index=2.0
+            ts=TS,
+            region="EUR",
+            cloud_cover_pct=30.0,
+            vegetation_index=0.2,
+            aerosol_index=2.0,
+            model_pm25_ugm3=12.0,
         ),
     ]
     records = compute_records(events)

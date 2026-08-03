@@ -33,7 +33,12 @@ def _weather_message(**overrides: Any) -> dict[str, Any]:
 
 def _satellite_message(**overrides: Any) -> dict[str, Any]:
     event = SatelliteEvent(
-        ts=UTC_TS, region="NAM", cloud_cover_pct=50.0, vegetation_index=0.0, aerosol_index=1.0
+        ts=UTC_TS,
+        region="NAM",
+        cloud_cover_pct=50.0,
+        vegetation_index=0.0,
+        aerosol_index=1.0,
+        model_pm25_ugm3=12.0,
     )
     message = EventEnvelope.wrap(event).model_dump(mode="json")
     message["payload"].update(overrides)

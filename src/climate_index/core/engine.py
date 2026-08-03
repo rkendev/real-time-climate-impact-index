@@ -67,6 +67,15 @@ def compute_records(
         anomaly = temperature_anomaly(bucket.weather, region, window_start.month, settings)
         dryness = dryness_index(bucket.weather, bucket.satellite, settings)
         pollution = pollution_index(bucket.satellite, settings)
+        # E-5: a reported summary of the model side, mean over the window's
+        # satellite events exactly as pollution_index means over the same
+        # events. None when the bucket holds none, never zero, because zero is
+        # a real concentration the provider does return.
+        model_pm25 = (
+            sum(event.model_pm25_ugm3 for event in bucket.satellite) / len(bucket.satellite)
+            if bucket.satellite
+            else None
+        )
         records.append(
             ClimateIndexRecord(
                 region=region,
@@ -77,6 +86,7 @@ def compute_records(
                 dryness_index=dryness,
                 pollution_index=pollution,
                 confidence=grade_confidence(len(bucket.weather), len(bucket.satellite), settings),
+                model_pm25_ugm3=model_pm25,
             )
         )
     return records

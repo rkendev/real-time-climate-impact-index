@@ -37,7 +37,12 @@ def _load_full_window(consumer: MemoryCommittableConsumer) -> None:
                 ts=TS, region=region, temperature_c=22.0, rainfall_mm=2.0, wind_speed_ms=1.0
             ),
             SatelliteEvent(
-                ts=TS, region=region, cloud_cover_pct=40.0, vegetation_index=0.2, aerosol_index=1.0
+                ts=TS,
+                region=region,
+                cloud_cover_pct=40.0,
+                vegetation_index=0.2,
+                aerosol_index=1.0,
+                model_pm25_ugm3=12.0,
             ),
         ):
             envelope = EventEnvelope.wrap(event)
