@@ -116,6 +116,17 @@ class SatelliteEvent(BaseModel):
 
     ts: UtcDatetime
     region: RegionCode
+    # E-7 sampling point. The contract freezes the comparison at city granularity,
+    # so the model side has to carry a city: a station is compared against the
+    # model value for its own city and only then aggregated to the region-window.
+    # The adapter already fetches one reading per city and previously discarded
+    # which one it was, which left the model half of a city-window unrecoverable
+    # from the emitted stream. The field follows mechanically from a frozen rule,
+    # as E-4's third member and the aggregate model PM2.5 field did.
+    #
+    # WeatherEvent deliberately does not gain it: the index reads weather at
+    # region granularity and no comparison is made against it.
+    city: str
     cloud_cover_pct: float = Field(ge=0, le=100)
     vegetation_index: float = Field(ge=-1, le=1)
     aerosol_index: float

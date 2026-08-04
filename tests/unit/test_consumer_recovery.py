@@ -22,6 +22,10 @@ from climate_index.consumer import run_consumer_once
 from climate_index.core.models import EventEnvelope, SatelliteEvent, WeatherEvent
 
 TS = datetime(2026, 7, 19, 12, 15, tzinfo=UTC)
+
+# The first configured city of each region (E-7). Satellite events carry the
+# sampling point, so a test event needs one that belongs to its region.
+_CITY = {"EUR": "Amsterdam", "NAM": "New York", "AFR": "Lagos", "ASI": "Tokyo"}
 WINDOW_START = datetime(2026, 7, 19, 12, 0, tzinfo=UTC)
 
 
@@ -39,6 +43,7 @@ def _load_full_window(consumer: MemoryCommittableConsumer) -> None:
             SatelliteEvent(
                 ts=TS,
                 region=region,
+                city=_CITY[region],
                 cloud_cover_pct=40.0,
                 vegetation_index=0.2,
                 aerosol_index=1.0,

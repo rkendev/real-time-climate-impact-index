@@ -42,6 +42,7 @@ def _satellite(ts: datetime) -> SatelliteEvent:
     return SatelliteEvent(
         ts=ts,
         region="EUR",
+        city="Amsterdam",
         cloud_cover_pct=50.0,
         vegetation_index=0.1,
         aerosol_index=1.0,

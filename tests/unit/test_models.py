@@ -60,6 +60,7 @@ def test_satellite_event_accepts_boundary_values() -> None:
     low = SatelliteEvent(
         ts=UTC_TS,
         region="AFR",
+        city="Lagos",
         cloud_cover_pct=0.0,
         vegetation_index=-1.0,
         aerosol_index=0.0,
@@ -68,6 +69,7 @@ def test_satellite_event_accepts_boundary_values() -> None:
     high = SatelliteEvent(
         ts=UTC_TS,
         region="AFR",
+        city="Lagos",
         cloud_cover_pct=100.0,
         vegetation_index=1.0,
         aerosol_index=9.9,
@@ -93,11 +95,18 @@ def test_satellite_event_rejects_out_of_range(field: str, value: float) -> None:
     kwargs = {
         "ts": UTC_TS,
         "region": "ASI",
+        "city": "Tokyo",
         "cloud_cover_pct": 50.0,
         "vegetation_index": 0.0,
         "aerosol_index": 1.0,
         "model_pm25_ugm3": 12.0,
     }
+    # The base must construct, or every case below raises for a missing or
+    # malformed field rather than for the bound under test and the whole
+    # parameterization passes while proving nothing. This is not hypothetical:
+    # adding `city` to E-3 broke exactly this test into a green that asserted
+    # only that a required field was absent.
+    SatelliteEvent(**kwargs)  # type: ignore[arg-type]
     kwargs[field] = value
     with pytest.raises(ValidationError):
         SatelliteEvent(**kwargs)  # type: ignore[arg-type]
@@ -151,6 +160,7 @@ def test_satellite_envelope_reports_satellite_type() -> None:
     event = SatelliteEvent(
         ts=UTC_TS,
         region="NAM",
+        city="New York",
         cloud_cover_pct=10.0,
         vegetation_index=0.2,
         aerosol_index=1.0,

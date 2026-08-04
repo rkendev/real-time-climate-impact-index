@@ -18,6 +18,10 @@ from climate_index.processor import run_processor
 
 TS = datetime(2026, 7, 19, 12, 15, tzinfo=UTC)
 
+# The first configured city of each region (E-7). Satellite events carry the
+# sampling point, so a test event needs one that belongs to its region.
+_CITY = {"EUR": "Amsterdam", "NAM": "New York", "AFR": "Lagos", "ASI": "Tokyo"}
+
 
 def _publish(transport: MemoryTransport, event: WeatherEvent | SatelliteEvent) -> None:
     envelope = EventEnvelope.wrap(event)
@@ -45,6 +49,7 @@ def test_processor_writes_one_record_per_region(tmp_path: Path) -> None:
             SatelliteEvent(
                 ts=TS,
                 region=region,
+                city=_CITY[region],
                 cloud_cover_pct=50.0,
                 vegetation_index=0.0,
                 aerosol_index=1.0,
@@ -79,6 +84,7 @@ def test_series_is_ordered_across_windows(tmp_path: Path) -> None:
             SatelliteEvent(
                 ts=ts,
                 region="EUR",
+                city="Amsterdam",
                 cloud_cover_pct=50.0,
                 vegetation_index=0.0,
                 aerosol_index=1.0,
@@ -108,6 +114,7 @@ def test_quarantined_event_never_becomes_an_aggregate(tmp_path: Path) -> None:
         SatelliteEvent(
             ts=TS,
             region="EUR",
+            city="Amsterdam",
             cloud_cover_pct=50.0,
             vegetation_index=0.0,
             aerosol_index=1.0,
@@ -138,6 +145,7 @@ def test_replay_through_processor_does_not_duplicate(tmp_path: Path) -> None:
         SatelliteEvent(
             ts=TS,
             region="EUR",
+            city="Amsterdam",
             cloud_cover_pct=50.0,
             vegetation_index=0.0,
             aerosol_index=1.0,

@@ -35,6 +35,7 @@ def _satellite(
     return SatelliteEvent(
         ts=TS,
         region="EUR",
+        city="Amsterdam",
         cloud_cover_pct=cloud_cover_pct,
         vegetation_index=vegetation_index,
         aerosol_index=aerosol_index,

@@ -393,6 +393,7 @@ class OpenMeteoEventSource:
             return SatelliteEvent(
                 ts=ts,
                 region=region,
+                city=city,
                 cloud_cover_pct=values["cloud_cover"],
                 # E-3: a configured monthly reference, not a measurement.
                 vegetation_index=self._monthly_vegetation[region][ts.month - 1],

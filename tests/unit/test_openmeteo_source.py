@@ -222,6 +222,33 @@ def test_one_city_failing_does_not_erase_its_region() -> None:
     assert {e.region for e in events} == {"EUR"}
 
 
+def test_each_satellite_event_names_the_city_it_was_fetched_for() -> None:
+    """E-3 carries the sampling point, so the attribution has to be the real one.
+
+    The contract freezes the comparison at city granularity, and a satellite
+    event whose city is not the city whose grid point was queried would compare a
+    station against the wrong model value while looking correct. Two cities are
+    fetched here so a constant, a first-city default or a swap is visible; with
+    one city every wrong answer coincides with the right one.
+    """
+    cities = {
+        "EUR": [
+            CityLocation(name="Amsterdam", latitude=52.3676, longitude=4.9041),
+            CityLocation(name="Berlin", latitude=52.52, longitude=13.405),
+        ]
+    }
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        chosen = AIR_OK if str(request.url).startswith(AIR_URL) else WEATHER_OK
+        return httpx.Response(200, json=chosen)
+
+    events = _source(handler, locations=cities).fetch_tick()
+    satellite = [e for e in events if isinstance(e, SatelliteEvent)]
+    assert sorted(e.city for e in satellite) == ["Amsterdam", "Berlin"]
+    for event in satellite:
+        assert event.city in {c.name for c in cities[event.region]}
+
+
 def test_the_request_asks_for_the_verified_variables_and_units() -> None:
     """Pins the probe findings: cloud_cover (not cloud_cover_total), ms, UTC."""
     seen: list[httpx.URL] = []

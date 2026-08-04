@@ -58,10 +58,13 @@ from climate_index.core.windowing import assign_window
 from climate_index.interfaces import Transport
 from climate_index.logging_utils import StructuredLogger, get_logger
 
-# Bounded defaults: twelve windows of history, two events per stream type per
-# region per window. At the 30 minute default window that is six hours of series
-# and 192 messages, small enough that a refresh is a short spike rather than a
-# resident load. Both are overridable from the demo environment.
+# Bounded defaults: twelve windows of history, two slots per region per window.
+# Each slot carries one weather event per region and one satellite event per
+# configured city, because E-3 carries the sampling point. At the 30 minute
+# default window and the four configured regions of three cities that is six
+# hours of series and at most 384 messages, still small enough that a refresh is
+# a short spike rather than a resident load. Both are overridable from the demo
+# environment.
 DEFAULT_WINDOWS = 12
 DEFAULT_EVENTS_PER_WINDOW = 2
 
@@ -132,8 +135,10 @@ def backfill_envelopes(
 
     Coverage per window, and what the committed grader makes of it (NFR-DQ2):
 
-    * most windows carry both a weather and a satellite reading per region at
-      every slot, which is what grades them MEASURED;
+    * most windows carry a weather reading per region and a satellite reading per
+      configured city at every slot, which is what grades them MEASURED. The
+      satellite stream is per city because E-3 carries the sampling point, which
+      is also the shape the real backfill below produces;
     * the windows :func:`degraded_window_ages` picks carry weather only, so one
       component is imputed and the grade falls to INFERRED;
     * the oldest of those carries a single weather reading per region, which is
@@ -168,7 +173,10 @@ def backfill_envelopes(
             for region in settings.region_list:
                 envelopes.append(EventEnvelope.wrap(generate_weather_event(region, ts=ts)))
                 if age not in degraded:
-                    envelopes.append(EventEnvelope.wrap(generate_satellite_event(region, ts=ts)))
+                    for city in settings.region_locations[region]:
+                        envelopes.append(
+                            EventEnvelope.wrap(generate_satellite_event(region, city.name, ts=ts))
+                        )
     return envelopes
 
 

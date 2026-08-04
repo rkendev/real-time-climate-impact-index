@@ -72,7 +72,7 @@ def _build_primary(
     if backend == "simulated":
         from climate_index.adapters.simulated import SimulatedEventSource
 
-        return SimulatedEventSource(resolved)
+        return SimulatedEventSource(resolved, settings.region_locations)
     if backend == "real":
         from climate_index.adapters.openmeteo import OpenMeteoEventSource
 

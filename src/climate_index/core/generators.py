@@ -49,11 +49,20 @@ def generate_weather_event(region: str, *, ts: datetime | None = None) -> Weathe
     )
 
 
-def generate_satellite_event(region: str, *, ts: datetime | None = None) -> SatelliteEvent:
-    """Return one valid SatelliteEvent for ``region`` (FR-1)."""
+def generate_satellite_event(
+    region: str, city: str, *, ts: datetime | None = None
+) -> SatelliteEvent:
+    """Return one valid SatelliteEvent for ``region`` at ``city`` (FR-1).
+
+    ``city`` is positional and has no default. E-3 now carries the sampling
+    point, and a default here would let a synthetic reading be attributed to an
+    arbitrary city silently. The caller names the city it is generating for, as
+    the real adapter does.
+    """
     return SatelliteEvent(
         ts=ts if ts is not None else _now_utc(),
         region=region,
+        city=city,
         cloud_cover_pct=random.uniform(*_CLOUD_COVER_PCT_RANGE),
         vegetation_index=random.uniform(*_VEGETATION_INDEX_RANGE),
         aerosol_index=random.uniform(*_AEROSOL_INDEX_RANGE),

@@ -66,8 +66,11 @@ def test_backfill_is_bounded_by_the_configured_counts() -> None:
     degraded = degraded_window_ages(8, settings.demo_degraded_window_fraction)
     sparse = max(degraded)
     full = 8 - len(degraded)
+    # One weather envelope per region, and one satellite envelope per configured
+    # city, because E-3 carries the sampling point.
+    per_slot = sum(1 + len(settings.region_locations[region]) for region in REGIONS)
     expected = (
-        full * 2 * len(REGIONS) * 2  # both stream types at every slot
+        full * 2 * per_slot  # both stream types at every slot
         + (len(degraded) - 1) * 2 * len(REGIONS)  # weather only
         + len(REGIONS)  # the sparse window: one reading per region
     )
@@ -253,6 +256,7 @@ def test_real_mode_publishes_the_fetched_readings_untouched(
         SatelliteEvent(
             ts=ts,
             region="EUR",
+            city="Amsterdam",
             cloud_cover_pct=50.0,
             vegetation_index=0.5,
             aerosol_index=0.2,

@@ -1,8 +1,9 @@
 """Producer contract tests (UC-1, FR-2, NFR-S2).
 
 Injects MemoryTransport (no concrete client). Asserts the producer emits one
-weather and one satellite envelope per region per tick, each keyed by its region
-(NFR-S2), and each payload re-validates through its model.
+weather envelope per region and one satellite envelope per configured city per
+tick, each keyed by its region (NFR-S2), and each payload re-validates through
+its model.
 """
 
 from __future__ import annotations
@@ -10,17 +11,23 @@ from __future__ import annotations
 from datetime import UTC, datetime
 
 from climate_index.adapters.memory import MemoryTransport
-from climate_index.config import get_settings
+from climate_index.config import Settings, get_settings
 from climate_index.core.models import EventEnvelope, EventType, SatelliteEvent, WeatherEvent
 from climate_index.producer import run_producer
 
 
-def test_run_producer_publishes_two_events_per_region_per_tick() -> None:
+def _per_tick(regions: list[str]) -> int:
+    """One weather event per region, one satellite event per configured city."""
+    locations = Settings(_env_file=None).region_locations
+    return sum(1 + len(locations[region]) for region in regions)
+
+
+def test_run_producer_publishes_every_configured_stream_per_tick() -> None:
     transport = MemoryTransport()
     regions = ["EUR", "NAM"]
     published = run_producer(transport, regions, ticks=3)
 
-    assert published == 2 * len(regions) * 3
+    assert published == _per_tick(regions) * 3
     messages = list(transport.consume())
     assert len(messages) == published
 
@@ -37,14 +44,15 @@ def test_run_producer_publishes_two_events_per_region_per_tick() -> None:
 def test_run_producer_defaults_to_configured_regions() -> None:
     transport = MemoryTransport()
     published = run_producer(transport, ticks=1)
-    assert published == 2 * len(get_settings().region_list)
+    assert published == _per_tick(list(get_settings().region_list))
 
 
-def test_each_region_gets_one_weather_and_one_satellite_per_tick() -> None:
+def test_each_region_gets_one_weather_and_one_satellite_per_city_per_tick() -> None:
     transport = MemoryTransport()
+    cities = Settings(_env_file=None).region_locations["EUR"]
     run_producer(transport, ["EUR"], ticks=1)
     types = sorted(EventEnvelope.model_validate(v).event_type for _, v in transport.consume())
-    assert types == [EventType.SATELLITE, EventType.WEATHER]
+    assert types == [EventType.SATELLITE] * len(cities) + [EventType.WEATHER]
 
 
 def test_message_key_matches_payload_region() -> None:

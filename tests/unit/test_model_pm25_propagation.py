@@ -161,6 +161,7 @@ def _satellite(pm25: float) -> SatelliteEvent:
     return SatelliteEvent(
         ts=TS,
         region="EUR",
+        city="Amsterdam",
         cloud_cover_pct=50.0,
         vegetation_index=0.0,
         aerosol_index=1.0,

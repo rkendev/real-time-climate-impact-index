@@ -631,6 +631,70 @@ not ended. It goes red when T3 legitimately begins, and it is deleted in the sam
 commit that introduces the tolerance, so its deletion is the record of when the
 exclusion ended.
 
+## T3a: a second schema change, and why it is in scope
+
+Recorded 2026-08-04, at the start of T3a and before any comparison exists.
+
+`SatelliteEvent` gains a `city`. The contract freezes the comparison at city
+granularity in section 5, and a per-city comparison requires the model side to
+carry a city. The field follows mechanically from a frozen rule, exactly as the
+envelope's third member and the aggregate model PM2.5 field did, and it is in
+scope for the same reason.
+
+Recorded rather than assumed, because the contract's section 2 names the model
+PM2.5 field as an in-scope schema change and does not name this one. A reader
+comparing the scope list against the diff would otherwise find a field the scope
+did not authorise, and section 2 says an apparent necessity outside scope is a
+finding to record rather than a scope change to make. This is the record.
+
+**What it was not.** The alternative of leaving the stream at region granularity
+and passing city-keyed model values into an offline analysis was declined, and not
+because a schema change is inconvenient. It would leave the live pipeline
+computing no comparison while an offline analysis computed one, so the index would
+not report reduced confidence as section 1 of the contract claims, and D2 would
+measure something the shipped system does not do. That is the same failure the
+contract already declined when it declined per-station model fetching, and it is
+larger here. Reconciling upstream of aggregation was also declined: it contradicts
+the trigger UC-8 fixed at `6046845`.
+
+**No key moved, confirmed rather than assumed.** The raw path keys on
+`<prefix>/<region>/<window>/<uuid>` in S3 and has no column for the field at all in
+DuckDB, where the event body is a `payload JSON` column. The field is additive in
+both. This was checked before the field was written, because a DynamoDB key change
+is a table replacement rather than a migration, and the same check is owed to the
+aggregate fields that arrive with the reconciliation.
+
+**A composition change follows, and it is not cosmetic.** The simulated source
+emitted one satellite event per region. A generated event may not be attributed to
+a city it was not generated for, so the source now emits one per configured city,
+which is the composition the real adapter has always produced. The alternative,
+labelling one synthetic reading with the region's first city, is a fabrication of
+exactly the kind ADR-0007's no-fabrication rule exists to prevent, and a default
+city argument on the generator would have made it silent. `city` is therefore
+positional on `generate_satellite_event` and has no default.
+
+**A false green the change created, found and closed.** `test_satellite_event_rejects_out_of_range`
+builds a valid E-3 keyword set, corrupts one field and asserts the model rejects
+it. Adding a required `city` to the model without adding it to that keyword set
+left every case raising for the absent field rather than for the bound under test,
+so the whole parameterization passed while asserting only that a required field
+was missing. It is now paired with a no-fault control: the base keyword set must
+construct before the field is corrupted, which is what makes the rejection
+attributable. The same class of error put a `city` into a `WeatherEvent` in the
+naive-timestamp test, where it also passed, because that test expects a rejection
+and does not care which one. Both were introduced by a mechanical edit across the
+construction sites and neither was caught by the suite going green, which is the
+argument for the control rather than for more care.
+
+Two consequences, neither of which moves a grade. The confidence grader reads
+counts and both stream counts stay above zero, so no window changes tier; the
+demo's thin windows are arranged by omitting the satellite stream entirely and by
+cutting slots, both of which still work. The simulated backfill publishes more
+messages per window than it did, and the bounded default is now at most 384 rather
+than 192. A region configured with no city is now refused at construction by both
+sources, because an empty city list would have produced weather-only windows that
+read as thinned coverage rather than as a misconfiguration.
+
 ## Post-project findings, recorded and not built
 
 Things worth fixing that this project will not fix. Section 2 of the contract

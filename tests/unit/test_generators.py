@@ -49,9 +49,12 @@ def test_weather_generator_produces_valid_events_across_regions() -> None:
 def test_satellite_generator_produces_valid_events_across_regions() -> None:
     for region in get_settings().region_list:
         for _ in range(_SAMPLES):
-            event = generate_satellite_event(region)
+            event = generate_satellite_event(region, "Testville")
             assert isinstance(event, SatelliteEvent)
             assert event.region == region
+            # Carried through verbatim: the generator names no city of its own,
+            # so a caller can never be handed an attribution it did not make.
+            assert event.city == "Testville"
             assert event.ts.utcoffset() == timedelta(0)
             assert _in_range(event.cloud_cover_pct, _CLOUD_COVER_PCT_RANGE)
             assert _in_range(event.vegetation_index, _VEGETATION_INDEX_RANGE)

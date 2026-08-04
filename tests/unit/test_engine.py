@@ -17,6 +17,10 @@ from climate_index.core.models import Confidence, SatelliteEvent, WeatherEvent
 
 TS = datetime(2026, 7, 19, 12, 15, tzinfo=UTC)
 
+# The first configured city of each region (E-7). Satellite events carry the
+# sampling point, so a test event needs one that belongs to its region.
+_CITY = {"EUR": "Amsterdam", "NAM": "New York", "AFR": "Lagos", "ASI": "Tokyo"}
+
 
 def _weather(
     region: str, temperature_c: float, rainfall_mm: float, ts: datetime = TS
@@ -34,6 +38,7 @@ def _satellite(region: str, ts: datetime = TS) -> SatelliteEvent:
     return SatelliteEvent(
         ts=ts,
         region=region,
+        city=_CITY[region],
         cloud_cover_pct=50.0,
         vegetation_index=0.0,
         aerosol_index=1.0,
@@ -48,6 +53,7 @@ def test_one_record_per_region_per_window_with_expected_values() -> None:
         SatelliteEvent(
             ts=TS,
             region="EUR",
+            city="Amsterdam",
             cloud_cover_pct=50.0,
             vegetation_index=0.0,
             aerosol_index=1.0,
@@ -56,6 +62,7 @@ def test_one_record_per_region_per_window_with_expected_values() -> None:
         SatelliteEvent(
             ts=TS,
             region="EUR",
+            city="Amsterdam",
             cloud_cover_pct=30.0,
             vegetation_index=0.2,
             aerosol_index=2.0,

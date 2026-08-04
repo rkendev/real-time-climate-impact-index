@@ -35,6 +35,7 @@ def _satellite_message(**overrides: Any) -> dict[str, Any]:
     event = SatelliteEvent(
         ts=UTC_TS,
         region="NAM",
+        city="New York",
         cloud_cover_pct=50.0,
         vegetation_index=0.0,
         aerosol_index=1.0,
