@@ -1502,6 +1502,155 @@ because it changes what the T2 paragraph should be read to mean, and because
 discovering at the end that a required output has no second arm would be worse
 than saying so now.
 
+## What the 0 against 83 split actually is, diagnosed on the control window
+
+Recorded 2026-08-04, before the holdout is opened. Diagnosis of the apparatus over
+the control window, which is what a control window is for. It moves nothing.
+
+Madrid at 0 of 156 is not a low rate, it is never. Delhi and New York above 82
+percent are not high rates, they are almost always. Total separation is a
+signature rather than a result, and it has now been diagnosed by reporting the
+distribution of `|O - M|` against the distribution of `T(O)` for each city.
+
+| city | n | `\|O-M\|` q1 / med / q3 / max | `T` q1 / med / q3 / max | station med | model med | ratio med | ratio max |
+| --- | ---: | --- | --- | ---: | ---: | ---: | ---: |
+| Delhi | 162 | 15.5 / 26.7 / 96.2 / 190.7 | 11.3 / 12.9 / 14.3 / 23.9 | 14.8 | 40.1 | 2.47 | 15.79 |
+| New York | 168 | 9.8 / 15.9 / 27.7 / 98.3 | 9.0 / 9.0 / 9.0 / 9.0 | 0.0 | 15.9 | 1.77 | 10.92 |
+| Madrid | 156 | 1.2 / 2.7 / 4.0 / 13.7 | 9.5 / 9.9 / 10.6 / 16.1 | 6.5 | 5.3 | 0.26 | 0.92 |
+
+**Madrid: the cause is the tolerance, not the model.** Its largest observed
+difference across the whole week reaches 0.92 of its own tolerance and never
+crosses it. Madrid's concentrations are low, station median 6.5 and model median
+5.3, so `T` sits essentially at its floor of about 9.9. A flag at Madrid would
+require the two sources to differ by more than 1.5 times the entire measured
+concentration. The 0 percent is not evidence that the 11 km model agrees with
+Madrid. It is evidence that at Madrid's concentrations almost no disagreement is
+expressible.
+
+**Delhi: genuine and large divergence.** Station median 14.8 against model median
+40.1, with `|O - M|` routinely two to seven times its own tolerance and a maximum
+of 190.7. This is the one city of three where the flag rate is measuring what the
+project set out to measure.
+
+**New York: not disagreement at all, and this was not anticipated.** Its `T` is
+exactly 9.0 at every one of 168 hours, which is the floor and means the city value
+is at or near zero throughout. Three of its four contributing stations report
+median values of 0.03, 0.02 and 0.04 micrograms per cubic metre across the full
+week. Those are not plausible urban PM2.5 concentrations; they are below any real
+detection limit. The fourth station, 971, reports a median of 9.70, which is
+plausible. The median of four then lands at about 0.03, because three of the four
+carry it.
+
+So New York's 82.7 percent measures three stations reporting essentially zero
+against a model reading about 16, and it is a station data quality finding wearing
+a disagreement rate's clothing.
+
+**The pooled 56.4 percent is therefore a composite of three unlike things:** one
+city where the tolerance cannot fire, one city where implausible station values
+force flags, and one city with real divergence. It should not be quoted as a
+disagreement rate without all three beside it.
+
+**And the median rule's limit is now visible from the other side.** In Madrid it
+absorbed one bad station in three, exactly as the contract intended. In New York
+it cannot, because three of four stations carry the fault, and a median follows
+the majority. **The median tolerates a minority of bad stations and adopts a
+majority of them.** The frozen rule is correct and its protection is bounded, and
+the bound was reached in this run.
+
+Nothing here moves a predicate. The tolerance, its constants, the median rule, the
+minimum coverage and the band are all as frozen.
+
+## Applying a European regulatory criterion unchanged across an order of magnitude
+
+Recorded before the holdout, so it cannot look assembled afterwards.
+
+The Modelling Quality Objective widens with concentration by design, and the
+contract records why: a proportional bar over-flags at low concentration and a
+flat absolute bar barely flags there, so the published form blends the two and
+anchors at a reference value of 25. That reasoning is sound for the setting it was
+derived in, which is European regulatory air quality assessment.
+
+This project applies it unchanged to cities whose PM2.5 differs by an order of
+magnitude. The consequence is now measured rather than argued: **the same frozen
+threshold is simultaneously too loose at low concentrations and too tight at high
+ones, in different cities, in the same run.** At Madrid it is so loose that
+disagreement is not expressible, with the largest difference of the week at 0.92
+of tolerance. At Delhi it is exceeded by a median factor of 2.47 and a maximum of
+15.79, so nearly everything flags and the rate carries no information about which
+hours disagreed worst.
+
+**The pre-registered prediction named both pressures and did not anticipate both
+being true at once.** It recorded a downward pressure, that `T`'s floor of 9.0
+would exceed typical departures and drive the rate below 1 percent, and an upward
+pressure from representativeness mismatch inflating measured differences. It then
+said which dominates is not predicted. What has happened is neither: the downward
+pressure dominates completely in one city and the upward pressure dominates
+completely in another, and the pooled rate is an average of a floor effect and a
+ceiling effect rather than a measurement of anything in between.
+
+That is a finding about applying a European regulatory criterion unchanged to
+Delhi and to Madrid, and it is more useful than any flag rate this project will
+produce. It is also not a reason to change the criterion, which is frozen, and it
+is recorded before the holdout precisely so that it cannot be read as an
+explanation constructed after seeing which way the holdout fell.
+
+## The construction breakdown, and the third sample-of-one generalisation
+
+T2 recorded that the required provider-hourly against computed-mean breakdown was
+fully confounded with city, because every EEA, AirNow and Japanese station sampled
+reported `observedCount` of one and CPCB was the only multi-sample network found.
+The computed-mean arm was therefore Delhi and nothing else.
+
+**All 2037 Delhi rows across the full control week return `observedCount` of one.**
+The computed-mean arm is not a single city; it has no members. The T2 confound is
+therefore moot rather than mitigated: there is nothing to confound, because the
+breakdown cannot be produced at all over this population. Both records are kept in
+sequence, as with the per-domain confound, because when each became visible is
+part of the evidence.
+
+**Name the pattern, because it is now three.** Three separate properties of the
+station population were each established from one sensor or one city, generalised
+to the whole, and each turned out not to describe it:
+
+* **completeness**, from one unnamed Berlin sensor at 18 hours of 42, generalised
+  to 208 sensors across eight cities. Twenty-seven contribute;
+* **endpoint capability**, from one sensor per city, generalised to mean that
+  admitted sensors would serve the capture window. 181 of 208 serve nothing;
+* **construction classification**, from a sample identifying CPCB as the only
+  multi-sample network, generalised to a breakdown arm. That arm is empty.
+
+The common form is not carelessness in any one case. It is that a property was
+verified where it was cheap to verify and assumed where it was not, and the
+pre-flight recorded the verification without recording the assumption beside it.
+A single instance establishes that a thing can happen, never how often.
+
+## The sentinel is a limit, not a repair
+
+Two values of `-998.0` from Madrid station 4331, at two separate hours, passed both
+frozen validity conditions: `hasFlags` false and `observedCount` one.
+
+**The median absorbed them.** Madrid contributes exactly three stations, so a mean
+would have driven the city value to about -330 for those hours and flagged both.
+The median took the middle value and neither hour was distorted. The contract chose
+the median so that one bad station does not carry the window, and that is now
+demonstrated by an event rather than argued from a hypothetical.
+
+**What it exposes, and nothing follows from it.** The frozen validity rule does not
+detect a sentinel. It delegates validity to the provider's own quality flag, which
+is a deliberate choice recorded in the contract and defended there on the grounds
+that inventing a cutoff would substitute this project's judgement for a cited one.
+That choice has a cost and the cost is now visible: a value no instrument could
+produce is admitted as a measurement. A city with more stations and more sentinels
+could move a median, since the median's protection is bounded by the fault being
+in a minority, which New York's near-zero stations have already shown can fail.
+
+**Nothing changes.** `hasFlags` and `observedCount` stay exactly as frozen. No
+sentinel filter is added, no plausibility bound is introduced, and no value is
+excluded. The sentinel is reported in the negatives count with its magnitude, which
+is where the contract's pre-committed reporting obligation puts it. Adding a filter
+now would be an observation moving a frozen rule, and it would be doing so on the
+strength of two hours.
+
 ## Post-project findings, recorded and not built
 
 Things worth fixing that this project will not fix. Section 2 of the contract
