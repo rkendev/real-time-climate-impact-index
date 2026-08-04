@@ -126,11 +126,54 @@ def cross_check_covered_count(records: Sequence[ClimateIndexRecord]) -> int:
     return by_scalar
 
 
-def summarize(records: Sequence[ClimateIndexRecord], name: str) -> dict[str, Any]:
+def per_city_breakdown(records: Sequence[ClimateIndexRecord]) -> dict[str, dict[str, int]]:
+    """Covered and flagged counts per city. The unit D2 binds on."""
+    out: dict[str, dict[str, int]] = {}
+    for record in records:
+        for comparison in record.city_comparisons:
+            if not comparison.covered:
+                continue
+            entry = out.setdefault(comparison.city, {"covered": 0, "flagged": 0})
+            entry["covered"] += 1
+            if comparison.state is PM25DisagreementState.DISAGREED:
+                entry["flagged"] += 1
+    return dict(sorted(out.items()))
+
+
+def weaker_condition_count(
+    records: Sequence[ClimateIndexRecord], settings: Settings
+) -> dict[str, int]:
+    """How many covered city-windows satisfy the weaker condition, as evidence only.
+
+    Section 4.3 requires the count under ``|Oi - Mi| <= U(Oi)`` to be reported
+    beside the beta = 2 count, with no floor attached to it and no claim binding
+    to it. ``U`` is ``T / beta``, so it is recoverable from the tolerance already
+    on each comparison without restating any constant.
+    """
+    within = 0
+    total = 0
+    for record in records:
+        for comparison in record.city_comparisons:
+            if not comparison.covered or comparison.tolerance is None:
+                continue
+            station, model = comparison.station_pm25_ugm3, comparison.model_pm25_ugm3
+            if station is None or model is None:
+                continue
+            total += 1
+            if abs(station - model) <= comparison.tolerance / settings.mqo_beta:
+                within += 1
+    return {"covered": total, "within_u": within, "outside_u": total - within}
+
+
+def summarize(
+    records: Sequence[ClimateIndexRecord], name: str, settings: Settings
+) -> dict[str, Any]:
     """The run's reported figures. An apparatus check, not a result."""
     covered = cross_check_covered_count(records)
     flagged = sum(record.flagged_city_count for record in records)
     return {
+        "per_city": per_city_breakdown(records),
+        "weaker_condition": weaker_condition_count(records, settings),
         "schema": "reconciliation-run/1",
         "window": name,
         "note": (
@@ -187,7 +230,7 @@ def main(argv: list[str] | None = None) -> int:
             settings,
             window=window,
         )
-        summary = summarize(records, args.window)
+        summary = summarize(records, args.window, settings)
     except (ApparatusFault, WindowViolationError) as fault:
         print(f"apparatus fault, run blocked: {fault}")
         print("Diagnose this in writing before attempting a repair. It is not a finding.")

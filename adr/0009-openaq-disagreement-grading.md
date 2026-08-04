@@ -1367,6 +1367,141 @@ Madrid, which the disclosure does not mention, is now the city actually sitting 
 the threshold. Both halves of that are recorded because a caveat that was
 directionally right is not the same as one that was right.
 
+## The control-window run, and the rate it showed
+
+Recorded 2026-08-04. **This is an apparatus check and not a result.** The control
+window is not the holdout, so D2's 1 to 33 band and its 200 city-window
+precondition apply to none of what follows. The run completed with no apparatus
+fault, at the first attempt, so no re-run of the contract's two was needed.
+
+**A choice made on principle before either number was seen.** The run used a
+60 minute window. The frozen temporal alignment pairs both sources on the hour,
+and the contract itself notes that at the local default of 30 every second window
+holds no fresh observation. Running at 30 would have made half the city-windows
+empty as an artifact of pipeline window size rather than of any frozen rule. That
+follows from the contract and not from the outcome, and it was stated before the
+run.
+
+### The numbers
+
+| | covered city-windows | flagged | rate |
+| --- | ---: | ---: | ---: |
+| **pooled** | **486** | **274** | **56.4%** |
+| Delhi (CAMS global, 45 km) | 162 | 135 | 83.3% |
+| New York (CAMS global, 45 km) | 168 | 139 | 82.7% |
+| Madrid (CAMS Europe, 11 km) | 156 | 0 | 0.0% |
+
+Region-windows: 672, of which 486 STATION_CHECKED and 186 UNCHECKED; by state, 274
+DISAGREED, 212 AGREED, 186 NOT_COMPARED. The covered count of 486 was established
+by both derivations independently and they agreed, which is what
+`cross_check_covered_count` exists to require.
+
+**The union rule never unioned anything.** No region has two cities clearing the
+minimum coverage rule, so every covered region-window rests on exactly one city.
+The identity between 486 covered city-windows and 486 STATION_CHECKED
+region-windows is that fact, not a coincidence.
+
+**The per-domain split is total, and it is the confound recorded in advance.**
+CAMS global flags 274 of 330; CAMS Europe flags 0 of 156. That is as clean a split
+as the arithmetic permits, and it is exactly the contrast the paragraph committed
+before this run said may not be read as evidence that model resolution affects the
+rate, because the 11 km arm is Madrid and nothing else. A reader looking at
+83% against 0% will want to conclude something about grid resolution. The design
+does not support it and no analysis after the fact can separate resolution from
+Madrid.
+
+**The weaker condition**, reported as evidence with no claim bound to it: of 486
+covered city-windows, 146 satisfy `|Oi - Mi| <= U(Oi)` and 340 do not.
+
+### Nothing moved, and here is the proof, run after the number
+
+The freeze evidence is run and recorded **after** the rate was seen, not before.
+Checked before, it proves something nobody doubted. Checked after, it proves the
+thing that matters. Executed at `2026-08-04T14:52:48Z`, with the rate above
+already on screen:
+
+```
+$ git log --format=%H -- PREREGISTRATION.md
+b81f1c97ae1a7e69918d918d5636318f57aee791
+
+$ git log --format='%h %ci' -1 -- PREREGISTRATION.md
+b81f1c9 2026-08-02 20:25:16 +0000
+
+$ pytest tests/hygiene/test_settings_match_contract.py
+7 passed
+```
+
+One commit, dated two days before this run, and the settings still match sections
+4.1 and 5 of the document at that commit. T, beta at 2, alpha at 0.50, `Ur(RV)` at
+0.36, `RV` at 25, the minimum coverage of 3, the median rule, the union rule, the
+1 to 33 band and the 200 precondition are all exactly as frozen. **No predicate
+moved after the number was seen.**
+
+And the paragraph committed at `97d59e8`, before the capture existed, stands
+unchanged beneath it: the holdout opens exactly once regardless of what the
+control window showed, and this rate is not admissible as a reason to skip,
+shorten or reframe the D2 evaluation. A pooled 56.4% sits above the 1 to 33 band.
+That is not a reason to do anything differently, and the control window is not the
+holdout.
+
+### The three pre-committed inert-condition counts, one answered and two lost
+
+Section 5 pre-commits to counting, during the measurement, the hours carrying
+`hasFlags` true, the hours with `observedCount` below one, and the hours returned
+with a null value.
+
+**Negative values, answered.** 24 of 4031 retained rows are negative, 0.60%.
+Median -2.55, distributed as 7 in `[-1, 0)`, 14 in `[-5, -1)`, 1 in `[-10, -5)`
+and 2 below -10. By city: New York 13, Delhi 9, Madrid 2.
+
+**And the two below -10 are not measurements.** Both are `-998.0`, from Madrid
+station 4331, at two separate hours. That is a sentinel, and it passed both frozen
+validity conditions: `hasFlags` was false and `observedCount` was 1. The frozen
+gate does not catch it, and the contract's decision to treat the provider's own
+flag as the external authority on validity is precisely what lets it through.
+
+**The median rule earned its stated purpose, in the one city that could least
+afford it.** Madrid contributes exactly three stations. A mean over
+`{-998, x, y}` would have driven Madrid's value to about -330 and flagged every
+hour it touched. The median took the middle value and the two sentinel hours
+passed through without distorting anything, which is why Madrid reads 0 flagged
+rather than 2. The contract chose the median so that "one bad station does not
+carry the window", and here that is not a hypothetical.
+
+**The other two counts are unavailable for this window, and that is my defect.**
+The capture filtered on `hasFlags` and on `observedCount` without counting what it
+removed. A gate that filters without counting cannot report whether it ever fired,
+which is the exact question the pre-commitment exists to answer. The capture
+script now tallies rows returned, retained, and removed by each condition
+separately, with a test requiring returned to equal retained plus every named
+removal reason so an unnamed one cannot hide. The holdout capture will carry all
+three figures. **For the control window, two of the three are lost and cannot be
+recovered without re-running acquisition, which I am not doing after having seen a
+rate.**
+
+**What can still be said, and what cannot.** Every one of the 4031 retained rows
+carries `observedCount == 1`. The contract's hypothesis was that the frozen
+validity gate may be inert over this population, and this is consistent with it
+but does not establish it, because the rows the gate removed were never counted.
+The holdout will answer it.
+
+### The construction breakdown has an empty arm, which supersedes the T2 confound
+
+T2 recorded that the required provider-hourly against computed-mean breakdown was
+fully confounded with city, because CPCB was the only multi-sample network found
+and the computed-mean arm was therefore Delhi and nothing else.
+
+That is now too generous. **All 4031 retained rows are `PROVIDER_HOURLY`, including
+all 2037 Delhi rows.** Every CPCB hour in this window returned `observedCount` of
+1. The computed-mean arm is not Delhi-only; it is **empty**. The required
+breakdown cannot be produced at all over this window, and the finding is not that
+one arm is a single city but that one arm has no members.
+
+Whether the holdout week differs is not known and is not assumed. Recorded here
+because it changes what the T2 paragraph should be read to mean, and because
+discovering at the end that a required output has no second arm would be worse
+than saying so now.
+
 ## Post-project findings, recorded and not built
 
 Things worth fixing that this project will not fix. Section 2 of the contract

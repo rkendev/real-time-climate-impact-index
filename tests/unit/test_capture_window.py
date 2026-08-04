@@ -367,3 +367,58 @@ def test_the_capture_takes_no_date_arguments_at_all() -> None:
     parser = build_parser(("control",))
     flags = {action.option_strings[0] for action in parser._actions if action.option_strings}
     assert flags == {"-h", "--window"}
+
+
+# --- the validity gate must count what it removes ------------------------------
+
+
+def test_the_gate_counts_every_reason_it_removed_an_hour() -> None:
+    """A gate that filters without counting cannot report whether it ever fired.
+
+    Section 5 pre-commits to reporting, during the measurement, how many hours
+    carried hasFlags true, how many reported observedCount below one, and how
+    many came back with a null value. The first control capture filtered on all
+    three and counted none of them, so two of the three figures are unavailable
+    for that window. This is the repair.
+    """
+    from collections import Counter
+
+    from capture_window import station_rows
+
+    payload = {
+        "results": [
+            _hour(_stamp(INSIDE), 12.5),
+            _hour(_stamp(INSIDE), 12.5, flags=True),
+            _hour(_stamp(INSIDE), 12.5, observed=0),
+            _hour(_stamp(INSIDE), None),  # type: ignore[arg-type]
+            "nonsense",
+        ]
+    }
+    gate: Counter[str] = Counter()
+    rows = station_rows(payload, SENSOR, gate)
+    assert len(rows) == 1
+    assert gate["returned"] == 5
+    assert gate["retained"] == 1
+    assert gate["has_flags_true"] == 1
+    assert gate["observed_count_below_one"] == 1
+    assert gate["null_value"] == 1
+    assert gate["malformed"] == 1
+
+
+def test_the_gate_tally_accounts_for_every_returned_row() -> None:
+    """Returned must equal retained plus every removal reason, or one is unnamed."""
+    from collections import Counter
+
+    from capture_window import station_rows
+
+    payload = {
+        "results": [
+            _hour(_stamp(INSIDE), 1.0),
+            _hour(_stamp(INSIDE), 2.0, flags=True),
+            _hour(_stamp(INSIDE), 3.0, observed=0),
+        ]
+    }
+    gate: Counter[str] = Counter()
+    station_rows(payload, SENSOR, gate)
+    removed = sum(v for k, v in gate.items() if k not in ("returned", "retained"))
+    assert gate["returned"] == gate["retained"] + removed

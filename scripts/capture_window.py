@@ -230,6 +230,7 @@ def _parse_hour(value: Any) -> datetime | None:
 def station_rows(
     payload: dict[str, Any],
     sensor: dict[str, Any],
+    gate: Counter[str] | None = None,
 ) -> list[dict[str, Any]]:
     """Turn one page of hourly rows into E-8 shaped dicts, applying only validity.
 
@@ -243,20 +244,32 @@ def station_rows(
     them would bias the station value upward precisely where the tolerance floor
     dominates.
     """
+    tally = gate if gate is not None else Counter()
     rows: list[dict[str, Any]] = []
     for entry in payload.get("results", []):
+        tally["returned"] += 1
         if not isinstance(entry, dict):
+            tally["malformed"] += 1
             continue
         moment = _parse_hour(entry.get("period", {}).get("datetimeFrom"))
         value = entry.get("value")
         coverage = entry.get("coverage") or {}
         observed = coverage.get("observedCount")
+        if value is None:
+            # Counted separately: section 5 pre-commits to reporting hours
+            # returned with a null value alongside the two gate conditions.
+            tally["null_value"] += 1
+            continue
         if moment is None or not isinstance(value, int | float):
+            tally["malformed"] += 1
             continue
         if entry.get("hasFlags"):
+            tally["has_flags_true"] += 1
             continue
         if not isinstance(observed, int) or observed < 1:
+            tally["observed_count_below_one"] += 1
             continue
+        tally["retained"] += 1
         rows.append(
             {
                 "ts": _iso(moment),
@@ -299,6 +312,7 @@ def fetch_station_side(
     sensors: list[dict[str, Any]],
     start: datetime,
     end: datetime,
+    gate: Counter[str] | None = None,
 ) -> list[dict[str, Any]]:
     """One paged call chain per admitted sensor over the window."""
     rows: list[dict[str, Any]] = []
@@ -306,7 +320,7 @@ def fetch_station_side(
         page = 1
         while True:
             payload = client.get(station_url(base_url, int(sensor["sensor_id"]), start, end, page))
-            batch = station_rows(payload, sensor)
+            batch = station_rows(payload, sensor, gate)
             rows += batch
             found = payload.get("meta", {}).get("found")
             if len(payload.get("results", [])) < PAGE_LIMIT:
@@ -405,6 +419,7 @@ def build_artifact(
     model_log: CallLog,
     now: datetime,
     voided: list[dict[str, Any]] | None = None,
+    gate: Counter[str] | None = None,
 ) -> dict[str, Any]:
     """The dated evidence artifact, in the form the admission artifact established."""
     voided = voided if voided is not None else []
@@ -447,6 +462,12 @@ def build_artifact(
         # when empty, because "no attempt was voided" and "voided attempts were
         # not recorded" are different claims.
         "voided_attempts": voided,
+        # The pre-committed reporting obligation from section 5: how many hours
+        # the provider returned, and how many each frozen validity condition
+        # removed. Counted rather than inferred, because a gate that filters
+        # without counting cannot report whether it ever fired. The first capture
+        # did filter without counting, which is recorded in ADR-0009.
+        "validity_gate": dict(sorted((gate or Counter()).items())),
     }
 
 
@@ -510,6 +531,7 @@ def main(argv: list[str] | None = None) -> int:
     ]
 
     station_log, model_log = CallLog(), CallLog()
+    gate: Counter[str] = Counter()
     try:
         stations = fetch_station_side(
             PacedClient(station_log, {"X-API-Key": key}),
@@ -517,6 +539,7 @@ def main(argv: list[str] | None = None) -> int:
             sensors,
             window.start,
             window.end,
+            gate,
         )
         models: list[dict[str, Any]] = []
         model_client = PacedClient(model_log)
@@ -566,6 +589,7 @@ def main(argv: list[str] | None = None) -> int:
         model_log=model_log,
         now=now,
         voided=void_history(args.window),
+        gate=gate,
     )
     EVIDENCE_DIR.mkdir(parents=True, exist_ok=True)
     path = EVIDENCE_DIR / f"{now.date().isoformat()}-{args.window}.json"
