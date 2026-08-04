@@ -1269,6 +1269,104 @@ location metadata does not predict what its hourly endpoint serves.** That is a
 second-order version of the AFR result and a more useful one, because AFR is data
 that visibly does not exist while this is data that appears to.
 
+## The per-domain breakdown is fully confounded with city, exactly as construction is
+
+Recorded before any rate exists, because a limit stated before the number is a
+limit and the same words after it are an excuse.
+
+The contract requires the flag rate broken down by model domain, and gives the
+reason: the coarser domain carries the larger representativeness term and would be
+expected to flag more, so a pooled rate driven by the global-grid regions is to be
+recorded rather than presented as uniform. That breakdown **cannot separate domain
+from city**, because of the eight admitted cities only three clear the minimum
+coverage rule, and of those three **Madrid is the only CAMS Europe city with any
+coverage at all**. The 11 km arm is therefore Madrid, and nothing else.
+
+So a difference between the two arms is equally well explained by any of: the
+model cell size, Madrid's concentration range, its siting mix, its three
+contributing stations against Delhi's fifteen and New York's four, or the
+calibration practice of the one Spanish network involved. The design separates
+none of them, and no amount of care in the analysis can separate them afterwards,
+because the confound is in the population rather than in the method.
+
+The output still ships, because the contract requires it. It ships with this
+paragraph beside it. It may not be read as evidence that model resolution affects
+the rate.
+
+**Both of the contract's required breakdowns are now single-city contrasts.** The
+construction breakdown is Delhi against not-Delhi and was recorded as such in T2.
+The per-domain breakdown is Madrid against not-Madrid and is recorded as such
+here. Two required outputs, each a city contrast wearing another name. That the
+first was known before the capture and the second only became visible after it is
+a fact about when each was detectable, not a difference in how either should be
+read.
+
+## 486 city-windows is three city-weeks, not 486 observations
+
+Recorded before any rate exists, for the same reason.
+
+The evaluability precondition exists to rule out a witness set too small to carry
+a percentage, and 486 clears 200 comfortably. **D2 is evaluable on its own frozen
+terms and nothing moves**: the precondition is met, the band does not change, and
+the rate will be computed and reported as the contract requires.
+
+The count is nonetheless not what a reader will take it for. It was written as
+though city-windows were independent, and they are not. They are 168 consecutive
+hours from each of three cities, and hourly surface PM2.5 persists strongly over
+many hours: consecutive hours in one city are close to the same observation
+repeated. **The effective number of independent clusters is three, not 486.**
+
+This belongs in section 7's territory, which records what a pass does not
+establish. A rate computed over this population is precise about three city-weeks,
+one each in Madrid, Delhi and New York, over seven specific days in July 2026. It
+carries almost no generalisation beyond them. It is not a rate for the eight
+admitted cities, not a rate for the four regions, and not a property of either
+data source in general. Any confidence interval computed as though n were 486
+would be wrong by a large factor, and none is computed here.
+
+Nothing about this moves a predicate. The precondition is a floor on the witness
+set and 486 clears it; this paragraph is about what the resulting number means,
+which the contract's section 7 already reserves for exactly this kind of statement.
+
+## Madrid at exactly three: the single point of failure, and its pre-committed handling
+
+Recorded before the holdout is opened, so that the response is chosen without
+knowing whether it will be needed.
+
+Madrid contributes exactly 3 stations, which is the minimum coverage rule's
+threshold. One station absent for the holdout week takes the total from 486 to
+330. The same single loss, because it is Madrid, **removes the entire CAMS Europe
+domain from the comparison** and reduces the per-domain breakdown from two arms to
+one, at which point that required output has nothing to contrast.
+
+**If it happens, it is reported and not repaired.** Pre-committed here, in
+advance:
+
+* no substitution of a station, from a neighbouring city or anywhere else;
+* no change to the radius rule, in either direction;
+* no re-derivation of the admitted set, which is pinned at version 2026-08-03;
+* no dropping the minimum coverage rule from three to two, which is the single
+  most tempting move available and the one that would most obviously be an
+  observation moving a frozen rule.
+
+The pre-registered responses already exist and are sufficient. Below 200 covered
+city-windows, D2 is NOT EVALUABLE and ships as such. Outside the 1 to 33 band, the
+grade is declared uninformative and every result ships report-only. A per-domain
+breakdown with one arm is reported as a breakdown with one arm, with the reason.
+None of that needs a new rule and none of it may be improved on after the fact.
+
+**The contract named the right city and was quantitatively optimistic.** Section 5
+disclosed in advance that Berlin sits near this boundary, with seven admitted
+stations and a completeness sample suggesting sensitivity, and said its
+covered-window count would be unusually sensitive to the minimum coverage rule.
+That was directionally correct: Berlin is indeed sensitive to the rule. It was
+also optimistic by the whole quantity in question, because Berlin does not sit
+near the boundary, it contributes two stations and therefore **zero** covered
+windows. The disclosure identified the right risk and understated its size, and
+Madrid, which the disclosure does not mention, is now the city actually sitting on
+the threshold. Both halves of that are recorded because a caveat that was
+directionally right is not the same as one that was right.
+
 ## Post-project findings, recorded and not built
 
 Things worth fixing that this project will not fix. Section 2 of the contract
