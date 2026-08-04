@@ -978,6 +978,44 @@ Without that, the thing protecting the inheritance seed from being vacuous would
 itself be unverified, which is the same recursion as a call-site gate that nothing
 checks the call site of.
 
+## T3a: the holdout opens regardless, written before the number exists
+
+Recorded 2026-08-04, **before the control window has been captured and before any
+comparison has been computed over any real hour**. That timing is the whole point
+of the paragraph and it is why this sits here rather than in the disclosure that
+follows the run.
+
+> The holdout opens exactly once regardless of what the control window showed.
+> The control rate is not admissible as a reason to skip, shorten or reframe the
+> D2 evaluation.
+
+**Why this needs writing at all.** Every quantity the control rate could move is
+frozen and now mechanically pinned: T, beta, alpha, `Ur(RV)`, `RV`, the 1 to 33
+band, the 200 city-window precondition, the minimum coverage of three, the median
+rule and the union rule are all in the contract at `b81f1c9`, and
+`tests/hygiene/test_settings_match_contract.py` fails if the settings drift from
+them or if the contract itself is edited.
+
+The **procedure** is not pinned by any of that, and it is the one lever left. If
+the control window comes back at, say, 0.3 percent, the available inference is
+that D2 will land below its band, be declared uninformative, and send everything
+to report-only, so T3b is not worth running. That reasoning would be an
+observation moving a procedure rather than a predicate. It is the same class of
+move the freeze exists to prevent, it would be entirely defensible-sounding at the
+time, and nothing in the mechanical apparatus would stop it.
+
+**Why now rather than after.** Written before the rate exists, this is a
+constraint. Written after, it is a defence, and a reader would be right to weigh
+it as one. That is the same reason the construction confound was written into this
+record in T2 before any rate existed, and the same reason the alpha ratification
+sequence was disclosed rather than tidied.
+
+The re-run cap is unaffected and stands as the contract sets it: at most two
+control re-runs after a diagnosed apparatus repair, every fault diagnosed in
+writing before any repair, a third fault shipping the project as "the measurement
+could not be completed" with the three diagnoses. A fault is not a rate, and none
+of this makes a blocked run into a finding.
+
 ## Post-project findings, recorded and not built
 
 Things worth fixing that this project will not fix. Section 2 of the contract
