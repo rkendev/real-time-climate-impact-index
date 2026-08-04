@@ -92,15 +92,35 @@ LOCATION_REFERENCE_GRADE: dict[str, Any] = {
     "datetimeLast": {"utc": "2018-06-25T10:00:00Z", "local": "2018-06-25T12:00:00+02:00"},
 }
 
-# DERIVED from LOCATION_REFERENCE_GRADE: isMonitor flipped false, which is the
-# discriminator the frozen inclusion rule uses. The flag itself was observed on
-# /v3/instruments, where it is false for every sensor-class instrument and true
-# for Government Monitor, BAM 1020, BAM 1022, AIO 2, Serinus 30 and MA350.
+# OBSERVED: location 3400895, "University of Lagos/Makoko", returned in a radius
+# query around the Lagos grid point where 60 of the 61 fixed stations are
+# non-monitor. Metadata only, no measured value, so no licence applies to what is
+# committed here. Replaces an earlier invented variant: the frozen inclusion rule
+# turns on isMonitor, and testing it against a station that exists is worth the
+# one call it cost.
 LOCATION_LOW_COST: dict[str, Any] = {
     **LOCATION_REFERENCE_GRADE,
-    "id": 900001,
+    "id": 3400895,
+    "name": "University of Lagos/Makoko",
     "isMonitor": False,
-    "instruments": [{"id": 4, "name": "Clarity Sensor"}],
+    "instruments": [{"id": 7, "name": "Unknown AirGradient Sensor"}],
+    "provider": {"id": 66, "name": "AirGradient"},
+    "licenses": [
+        {
+            "id": 41,
+            "name": "CC BY 4.0",
+            "attribution": {"name": "LAMATA", "url": None},
+            "dateFrom": "2023-07-15",
+            "dateTo": None,
+        }
+    ],
+    "sensors": [
+        {
+            "id": 12178112,
+            "name": "pm25 µg/m³",
+            "parameter": {"id": 2, "name": "pm25", "units": "µg/m³", "displayName": "PM2.5"},
+        }
+    ],
 }
 
 # ---------------------------------------------------------------------------
@@ -194,10 +214,16 @@ HOUR_FLAGGED: dict[str, Any] = {
     "flagInfo": {"hasFlags": True},
 }
 
-# DERIVED from HOUR_PROVIDER_HOURLY: a negative value. Not observed on an hourly
-# rollup, but the sensor summary for sensor 4235 reported a lifetime minimum of
-# -10.2, so negative readings demonstrably occur on this sensor. The frozen rule
-# retains them rather than clamping.
+# DERIVED from HOUR_PROVIDER_HOURLY: a negative value, and an observed instance
+# was sought and not found. Sensor 4235 reports a lifetime minimum of -10.2, so
+# negatives demonstrably occur on it, but three sampled months covering 1710
+# returned hours (January 2026, November 2025, April 2026) contained none. The
+# search was bounded and abandoned rather than extended.
+#
+# Worth noting beside the inert-validity finding in ADR-0009: the frozen rule
+# that retains negatives rather than clamping them protects against a case that
+# is real in this sensor's history but was not present in any recent hour
+# sampled.
 HOUR_NEGATIVE: dict[str, Any] = {**HOUR_PROVIDER_HOURLY, "value": -3.4}
 
 # DERIVED from HOUR_PROVIDER_HOURLY: observedCount zero. The frozen validity rule

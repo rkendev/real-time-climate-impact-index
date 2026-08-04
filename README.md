@@ -159,6 +159,8 @@ In real mode the readings come from [Open-Meteo](https://open-meteo.com/): the f
 
 Weather and air quality data by Open-Meteo. Atmospheric composition from the CAMS ENSEMBLE data provider.
 
+Ground-station observations come from [OpenAQ](https://openaq.org/), which aggregates national monitoring networks and requires a free API key. The key reaches the process through the environment and never enters this repository. Station data carries per-provider licence terms, and the terms differ: the European Environment Agency network is published under ODC-BY, which requires attribution and is attributed here; the United States AirNow network is public domain; the Japanese Ministry of the Environment network carries its own government terms. Some providers, including India's CPCB, publish no licence at all, and unstated terms are treated as not permissive rather than as permission, so no raw reading from those stations is committed to this repository.
+
 Two honest caveats, stated on the dashboard as well as here. These products are model analyses rather than station observations, so the page says "readings" and never "observations". And there is no free live per-coordinate vegetation index at this integration cost, so the vegetation term is a per-region monthly reference value held in configuration; it is not a measurement and is never presented as one. The per-region temperature normals are derived from ERA5 daily means over 1991-2020 for the same cities, and the derivation parameters are recorded in the specification so the constants are reproducible.
 
 ## Tech

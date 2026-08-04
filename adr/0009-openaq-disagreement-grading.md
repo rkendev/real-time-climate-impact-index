@@ -552,6 +552,85 @@ That is defensible, since a rule with no branch is a rule that cannot be honoure
 if the shape ever appears, but it is coverage of a hypothetical and should not be
 read as coverage of observed behaviour.
 
+## The construction breakdown is fully confounded with city
+
+Recorded before any rate exists, because a limit stated before the number is a
+limit and the same words after it are an excuse.
+
+The contract requires the flag rate broken down by how the hourly station value
+was built, provider-validated against computed mean. That breakdown **cannot
+separate construction from city**, because every EEA, AirNow and Japanese station
+sampled reports `observedCount` of one and CPCB is the only multi-sample network
+found. The computed-mean arm is therefore Delhi, and nothing else.
+
+So a difference between the two arms is equally well explained by any of: how the
+hourly value was built, Delhi's concentration range, its siting mix, the 45 km
+model cell it is compared against, or CPCB's calibration practice. The design
+separates none of them, and no amount of care in the analysis can separate them
+afterwards, because the confound is in the population rather than in the method.
+
+The output still ships, because the contract requires it. It ships with this
+paragraph beside it. It may not be read as evidence that construction affects the
+rate.
+
+## T2 close-out
+
+**What shipped.** `StationObservation` (E-8), `station` as the third
+`EventEnvelope` member, the validation gate widened to carry it, the OpenAQ
+adapter behind the unchanged source Protocol with a lazily imported client and no
+endpoint or key literal in source, and a composite source that fans out over both
+real sources. Station observations reach the transport and the raw store and
+touch no index value.
+
+**Guards, and which were proven red.** All of them, by seeding the defect and
+watching the failure rather than by watching a pass:
+
+- index invariance, station events changing no record field. Two shapes seeded.
+  The crude one, letting station events into the satellite bucket, went red at
+  once. **The realistic one, folding station coverage into the confidence grade
+  while touching no field value, did not**, because the fixture's only window
+  already graded MEASURED and a grade that cannot move cannot be seen to move.
+  The fixture now spans all three grades and both shapes go red;
+- the widened gate: a malformed station payload, an undeclared event type, and a
+  declared type with no model, the last of which was a real crash rather than a
+  rejection before the lookup was guarded;
+- the negative-space exclusion control, seeded with a reconciliation-shaped
+  function;
+- the admission artifact pin, seeded with a hand edit and with a silent refresh;
+- the fixture provenance control, seeded with a planted key and with a value
+  declared against a non-permitted station;
+- composite failure isolation, seeded by swallowing the failure and by letting it
+  propagate.
+
+**The licence incident.** Real readings from a CPCB station with unstated terms
+were committed at b05a40a and removed at cdc7108. The remedy is partial and the
+residue is disclosed above; history is not rewritten and the reason is recorded.
+The control that would have caught it now exists and is attached to the artifact
+rather than to an activity.
+
+**The pinned admission artifact** is `docs/evidence/station-admission/2026-08-03.json`,
+version `2026-08-03`, 208 admitted stations across 8 of 12 cities. The adapter
+reads it and derives nothing. Re-derivation writes a new dated file and its diff
+belongs here.
+
+**Findings carried, not built.** The seven in the list below, unchanged in
+substance by T2 except that finding 7, the mypy environment split, was added by
+it.
+
+**Two frozen validity conditions may be inert**, as recorded above, and a third
+observation now sits beside them: the rule retaining negative readings protects
+against a case that is real in one sensor's history but absent from 1710 recent
+hours sampled from it.
+
+**What T2 did not do, stated plainly.** No comparison exists. No station value has
+been subtracted from, divided by, or otherwise combined with a model value
+anywhere in this repository, in code, in a test, in a script or in a terminal. The
+negative-space control in `tests/hygiene/test_no_reconciliation_yet.py` remains in
+place and remains green, which is the dated evidence that the exclusion period has
+not ended. It goes red when T3 legitimately begins, and it is deleted in the same
+commit that introduces the tolerance, so its deletion is the record of when the
+exclusion ended.
+
 ## Post-project findings, recorded and not built
 
 Things worth fixing that this project will not fix. Section 2 of the contract
