@@ -1,0 +1,17 @@
+{
+  "schema": "control-window-rerun-counter/1",
+  "note": "The contract permits the control window to be re-run after a diagnosed apparatus repair at most twice. A third fault ships the project as 'the measurement could not be completed' with the three diagnoses. This counter lives in the repository rather than in anyone's recollection.",
+  "permitted_reruns": 2,
+  "spent": 1,
+  "remaining": 1,
+  "faults": [
+    {
+      "n": 1,
+      "diagnosed_at": "2026-08-04",
+      "diagnosis": "adr/0009-openaq-disagreement-grading.md, section 'APPARATUS FAULT: the instrument was reading the wrong sensors entirely'",
+      "summary": "admitted_sensors() assigned an OpenAQ location id to a field named sensor_id; nothing resolved it to a sensor id. /v3/sensors/{location_id}/hours returned unrelated sensors, three of four New York stations returning ozone in ppm recorded as PM2.5 in ug/m3. Defect is in T2-shipped code, not only in the capture script.",
+      "repair": "not yet made at the time of writing; resolve location to its pm25 sensor via /v3/locations/{id} and assert parameter and units of every sensor queried",
+      "voided_measurement": "docs/evidence/control-window/2026-08-04-control-run.json"
+    }
+  ]
+}

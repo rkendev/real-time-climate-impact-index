@@ -1651,6 +1651,90 @@ is where the contract's pre-committed reporting obligation puts it. Adding a fil
 now would be an observation moving a frozen rule, and it would be doing so on the
 strength of two hours.
 
+## APPARATUS FAULT: the instrument was reading the wrong sensors entirely
+
+Written 2026-08-04, **before any repair**, per the contract's rule. This blocks the
+control run. It is a defect and not a finding, and it voids the measurement.
+
+**What was found.** A diagnostic on the four New York stations, demanded before the
+holdout was opened, resolved each admitted location to its own sensor list:
+
+| our "station" | location name | its actual PM2.5 sensor | what `/sensors/{that id}` really is |
+| --- | --- | ---: | --- |
+| 857 | Fort Lee Near Road | 1534 | **`o3`, ppm** |
+| 928 | Jersey City FH | 5077566 | **`o3`, ppm** |
+| 971 | Elizabeth Trailer | 1758 | `pm25`, µg/m³ (a different station's) |
+
+**Three of the four New York stations were reading ozone in parts per million and
+recording it as PM2.5 in micrograms per cubic metre.** Urban ozone runs about 0.02
+to 0.05 ppm, which is exactly the 0.03, 0.02 and 0.04 "implausible PM2.5 medians"
+diagnosed an hour ago as a station data quality finding. They were not implausible
+PM2.5. They were entirely plausible ozone.
+
+**The root cause.** The admission artifact correctly stores **location** ids, under
+a key correctly named `sensor_location_ids`. `admitted_sensors()` at
+`src/climate_index/adapters/openaq/admission.py:74` assigns that location id to a
+field named `sensor_id`, with a docstring stating that the sensor identifier "is
+resolved by the adapter at fetch time". **Nothing resolves it.** The shipped
+adapter uses it directly at `src/climate_index/adapters/openaq/source.py:240`, and
+`scripts/capture_window.py` copied that. Location ids and sensor ids are different
+id spaces that overlap numerically, so a location id used as a sensor id either
+404s or silently returns a completely unrelated sensor, of any parameter, at any
+site.
+
+This is not a capture-script bug. **It is a defect in code shipped in T2**, and the
+docstring describing the resolution step is a description of something that was
+never written.
+
+**Every quantitative claim made from this capture is void.** Retracted in full, and
+struck rather than deleted:
+
+* the control-window rate of 56.4 percent, and the per-city rates of 83.3, 82.7 and
+  0.0 percent;
+* the 486 covered city-windows and the 274 flagged, and every count derived from
+  them, including the weaker-condition 146 of 486;
+* **contract defect six**, that admission's `datetimeFirst`/`datetimeLast` premise
+  is false. The 181 of 208 sensors "serving nothing" were location ids that are not
+  sensor ids. The contract's premise has not been tested and that defect is
+  withdrawn;
+* the 27-of-208 contributing figure and the whole "208 admitted, 27 contributing"
+  framing;
+* the per-domain confound as measured, the three-city-weeks independence limit as
+  measured, and the Madrid single-point-of-failure arithmetic, all of which rested
+  on which cities appeared covered;
+* the empty construction arm, since `observedCount` of 1 was read off the wrong
+  sensors;
+* the New York near-zero station finding, which was ozone;
+* the `-998.0` Madrid sentinel finding and the median-absorbed-it demonstration.
+  Whatever sensor 4331 is, it is not the PM2.5 sensor of that location.
+
+**What survives.** The freeze, which the pin still proves. The guards, the seeded
+violations, AT-13, and the successor control, none of which depend on these values.
+The capture and reconciliation apparatus, which did faithfully what it was told to
+do with the identifiers it was given. And the seal: **the holdout was not opened,
+which is the entire reason this was recoverable.**
+
+**Why the pattern paragraph now reads differently.** Three sample-of-one
+generalisations were recorded as a pattern. Two of the three, endpoint capability
+and construction classification, were themselves artifacts of this fault. The
+Berlin completeness one may stand. The pattern as stated is withdrawn along with
+its instances, and what replaces it is narrower and worse: **a field named
+`sensor_id` held a location id for the whole of T2, was documented as being
+resolved elsewhere, was never resolved, and no test compared an identifier against
+the entity it was supposed to name.**
+
+**The repair, not yet made.** Resolve each admitted location to its PM2.5 sensor id
+through `/v3/locations/{id}`, selecting the sensor whose `parameter.name` is
+`pm25`, and assert the parameter and units of every sensor actually queried. The
+assertion matters more than the lookup: this fault produced values that were
+individually plausible and only became visible when someone asked what the numbers
+were of.
+
+**Re-run accounting.** Under the contract's rule this is an apparatus fault
+requiring a diagnosed repair and a re-run of the control window. **One of the two
+permitted re-runs is spent by this.** The counter is recorded here and in the
+committed evidence, and the holdout still opens exactly once.
+
 ## Post-project findings, recorded and not built
 
 Things worth fixing that this project will not fix. Section 2 of the contract
