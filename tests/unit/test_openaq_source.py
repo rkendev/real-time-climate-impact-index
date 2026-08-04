@@ -27,13 +27,15 @@ from tests.unit.openaq_fixtures import (
 )
 
 from climate_index.adapters.composite_source import CompositeEventSource
-from climate_index.adapters.openaq.source import AdmittedSensor, OpenAQStationSource
+from climate_index.adapters.openaq.source import AdmittedLocation, OpenAQStationSource
 from climate_index.config import Settings
 from climate_index.core.models import Construction, StationObservation, WeatherEvent
 
 BASE = "https://stations.invalid/v3"
 NOW = datetime(2026, 8, 3, 14, 30, tzinfo=UTC)
-SENSOR = AdmittedSensor(sensor_id=4235, station_id="80", city="Amsterdam", region="EUR")
+SENSOR = AdmittedLocation(
+    location_id=80, station_id="80", city="Amsterdam", region="EUR", pm25_sensor_id=4235
+)
 
 
 class _Recorder:
@@ -48,7 +50,7 @@ class _Recorder:
 
 
 def _source(
-    handler: Any, *, sensors: tuple[AdmittedSensor, ...] = (SENSOR,)
+    handler: Any, *, sensors: tuple[AdmittedLocation, ...] = (SENSOR,)
 ) -> tuple[OpenAQStationSource, _Recorder]:
     log = _Recorder()
     source = OpenAQStationSource(
@@ -144,7 +146,9 @@ def test_a_timeout_is_counted_rather_than_raised() -> None:
 
 
 def test_one_bad_sensor_does_not_cost_the_others() -> None:
-    other = AdmittedSensor(sensor_id=118, station_id="79", city="Amsterdam", region="EUR")
+    other = AdmittedLocation(
+        location_id=79, station_id="79", city="Amsterdam", region="EUR", pm25_sensor_id=118
+    )
 
     def handler(request: httpx.Request) -> httpx.Response:
         if "/sensors/4235/" in str(request.url):

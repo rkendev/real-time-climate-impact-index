@@ -13,7 +13,7 @@ from pathlib import Path
 
 import pytest
 
-from climate_index.adapters.openaq import admitted_sensors, available_versions, load_artifact
+from climate_index.adapters.openaq import admitted_locations, available_versions, load_artifact
 
 # The last recorded figure, from the re-verification of 2026-08-03 written up in
 # adr/0009. Changing this number is changing a published result, so it changes
@@ -61,7 +61,7 @@ def test_the_totals_agree_with_the_per_city_entries() -> None:
     assert sum(c["funnel"]["admitted"] for c in cities.values()) == RECORDED_TOTAL
     assert sum(1 for c in cities.values() if c["funnel"]["admitted"]) == RECORDED_CITIES
     assert len(cities) == RECORDED_QUERIED
-    assert len(admitted_sensors(artifact)) == RECORDED_TOTAL
+    assert len(admitted_locations(artifact)) == RECORDED_TOTAL
 
 
 def test_the_run_that_produced_it_was_clean() -> None:

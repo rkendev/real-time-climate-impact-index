@@ -100,7 +100,7 @@ def _sample_count_conflict(observed: int, coverage: Any, summary: Any) -> str | 
 
 
 @dataclass(frozen=True)
-class AdmittedSensor:
+class AdmittedLocation:
     """One PM2.5 sensor admitted by the frozen station rules.
 
     Produced by applying the rules in ``PREREGISTRATION.md``: reference grade,
@@ -109,10 +109,15 @@ class AdmittedSensor:
     roughly three hundred calls and the rules are stable between runs.
     """
 
-    sensor_id: int
+    # The OpenAQ *location* id. A location is the monitoring station; its PM2.5
+    # sensor has a different id in a different id space and must be resolved and
+    # asserted before any hours query (ADR-0009, the apparatus fault).
+    location_id: int
     station_id: str
     city: str
     region: str
+    # Resolved from the location and checked to be pm25 in ug/m3. None until then.
+    pm25_sensor_id: int | None = None
 
 
 class OpenAQStationSource:
@@ -123,7 +128,7 @@ class OpenAQStationSource:
         *,
         base_url: str,
         api_key: str,
-        sensors: Sequence[AdmittedSensor],
+        sensors: Sequence[AdmittedLocation],
         lag_hours: int,
         timeout_s: float = 10.0,
         pace_s: float = 1.1,
@@ -147,7 +152,7 @@ class OpenAQStationSource:
     def from_settings(
         cls,
         settings: Settings,
-        sensors: Sequence[AdmittedSensor],
+        sensors: Sequence[AdmittedLocation],
         *,
         logger: StructuredLogger | None = None,
         transport: Any | None = None,
@@ -197,7 +202,7 @@ class OpenAQStationSource:
 
         return httpx
 
-    def _skip(self, reason: str, sensor: AdmittedSensor, **fields: Any) -> None:
+    def _skip(self, reason: str, sensor: AdmittedLocation, **fields: Any) -> None:
         self._missing += 1
         self._log.event(
             "station_reading_unavailable",
@@ -235,9 +240,14 @@ class OpenAQStationSource:
             time.sleep(wait)
 
     def _fetch_one(
-        self, client: Any, httpx: Any, sensor: AdmittedSensor, hour: datetime
+        self, client: Any, httpx: Any, sensor: AdmittedLocation, hour: datetime
     ) -> StationObservation | None:
-        url = f"{self._base_url}/sensors/{sensor.sensor_id}/hours"
+        if sensor.pm25_sensor_id is None:
+            raise ValueError(
+                f"location {sensor.location_id} has no resolved PM2.5 sensor; "
+                "resolve_pm25_sensor must run before any hours query (ADR-0009)"
+            )
+        url = f"{self._base_url}/sensors/{sensor.pm25_sensor_id}/hours"
         params = {
             "datetime_from": hour.strftime("%Y-%m-%dT%H:%M:%SZ"),
             "datetime_to": (hour + _HOUR).strftime("%Y-%m-%dT%H:%M:%SZ"),
@@ -272,7 +282,7 @@ class OpenAQStationSource:
         return self._build(payload, sensor, hour)
 
     def _build(
-        self, payload: Any, sensor: AdmittedSensor, hour: datetime
+        self, payload: Any, sensor: AdmittedLocation, hour: datetime
     ) -> StationObservation | None:
         if not isinstance(payload, dict):
             self._skip(_REASON_MALFORMED, sensor)

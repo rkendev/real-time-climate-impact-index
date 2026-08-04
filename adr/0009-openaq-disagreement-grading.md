@@ -1735,6 +1735,154 @@ requiring a diagnosed repair and a re-run of the control window. **One of the tw
 permitted re-runs is spent by this.** The counter is recorded here and in the
 committed evidence, and the holdout still opens exactly once.
 
+## What spends a re-run attempt, defined before the next one
+
+Written 2026-08-04, **before the repair**, with one attempt remaining and before
+knowing whether the repair will work. With two remaining this was academic. With
+one it decides whether the project can complete, which is exactly why it is being
+settled now rather than later in whichever direction suits the state.
+
+**The counter counts reconciliation runs over a captured window.** A reconciliation
+run is an execution of `scripts/reconcile.py` that produces a rate. Captures,
+metadata probes and verification fetches are **inputs** to a run and do not
+increment it.
+
+The reasoning, and it is the owner's, offered before the outcome was known: this
+reading is the one that makes a small verification fetch possible, and it was
+stated in advance of knowing whether that verification would pass. The alternative
+reading, where any contact with the provider spends an attempt, would make it
+rational to skip verification and spend the last attempt on hope, which is the
+opposite of what the cap exists to encourage.
+
+What the cap protects against is re-running a **measurement** until it gives an
+agreeable answer. A capture retrieves data without computing a rate; a metadata
+probe reads no measurement at all. Neither can produce a number to be disagreeable
+about, so neither is what the cap is for.
+
+**Spent: 1. Remaining: 1.** Recorded in
+`docs/evidence/control-window/rerun-counter.json`. The holdout still opens exactly
+once.
+
+## The identifier sweep, and the defect class no gate here was pointed at
+
+An identifier's name is a claim about what it identifies. **No test in this
+repository has ever checked a claim of that kind**, and the fault above is what
+that costs: a value that is type-correct, range-plausible and semantically wrong.
+Ozone at 0.03 ppm passes every check this project owns except the one nobody
+wrote, which is "is this a PM2.5 measurement".
+
+Every field whose name asserts an entity type was checked:
+
+| field | holds | verdict |
+| --- | --- | --- |
+| `AdmittedSensor.sensor_id` | an OpenAQ **location** id | **the fault**, repaired below |
+| `AdmittedSensor.station_id` | an OpenAQ location id | **correct**, see below |
+| `StationObservation.station_id` | the same location id | **correct** |
+| `KafkaTransport.group_id` | a consumer group name | correct, not an entity reference |
+
+The sweep found one instance and no others. `station_id` is correct for a
+non-obvious reason worth writing down: in the OpenAQ model a **location is the
+monitoring station**, so a location id is the right value for a field named
+`station_id`. The same integer is correct in one field and wrong in the other,
+which is precisely why reading the code did not reveal it and why only asking the
+provider what the entity was could.
+
+**The general form, for the record.** Type checking proves a value is an `int`.
+Range checking proves it is plausible. Neither proves it names the thing its field
+says it names, and a system that resolves identifiers against a remote API can be
+wholly type-correct and still be reading another entity entirely. The check that
+catches this is semantic and has to be made against the source of truth: ask what
+the identifier resolves to, and assert the answer.
+
+## What 208 counts, stated precisely rather than voided
+
+The admission artifact is **not wrong**. It stores location ids under a key
+correctly named `sensor_location_ids`, and its funnel counts are counts of
+locations.
+
+So, exactly: **208 is the number of monitoring locations meeting the frozen
+admission criteria** across eight cities. That figure stands and is untouched by
+this fault.
+
+**How many of those 208 resolve to a PM2.5 sensor that serves the capture window
+is unknown and untested.** It was never measured, because what was measured was
+whatever entity happened to share each location's integer. That is also why
+contract defect six is **withdrawn rather than inverted**: the claim that
+`datetimeFirst` and `datetimeLast` fail to predict hourly coverage may be true or
+false, and this project has produced no evidence either way.
+
+**Which sample-of-one generalisation survives.** Of the three recorded:
+
+* **completeness**, from one unnamed Berlin sensor at 18 hours of 42, generalised
+  to the whole population. **This one survives.** It is drawn from the pre-flight,
+  not from the faulty capture, and it remains a single unnamed sensor standing in
+  for 208 locations. It is also still not reproducible, because the sensor was
+  never named.
+* **endpoint capability**, that admitted sensors would serve the window.
+  **Withdrawn**: an artifact of this fault.
+* **construction classification**, the empty computed-mean arm. **Withdrawn**:
+  `observedCount` was read off the wrong sensors.
+
+One of three survives, and the pattern is not a pattern on one instance. What
+replaces it is the identifier claim above, which is a different and sharper thing.
+
+## The repair, and the small verification that precedes the last attempt
+
+Recorded 2026-08-04. No reconciliation run was spent on any of this, per the
+definition pinned above: captures and metadata probes are inputs.
+
+**The repair.** `admitted_sensors` becomes `admitted_locations` and returns an
+`AdmittedLocation` carrying `location_id`, `station_id` and a `pm25_sensor_id`
+that is `None` until resolved. `resolve_pm25_sensor` reads
+`/v3/locations/{id}`, selects the sensor whose `parameter.name` is `pm25`, and
+`check_pm25_sensor` asserts both the parameter name and the units before returning
+its id. A location offering no PM2.5 sensor is refused by name rather than having
+its first sensor returned. The hours query refuses outright when
+`pm25_sensor_id` is `None`, so skipping resolution is impossible rather than
+merely wrong.
+
+**The assertion is the repair; the lookup is plumbing.** `tests/unit/test_sensor_identity.py`
+seeds the violation with the two real sensors the diagnostic found: location 857
+resolves to 1534 and never to 857, and pointed at what `/sensors/857` actually
+serves the resolver refuses with "location 857 has no pm25 sensor; it offers
+['o3']". A pm25 sensor reporting ppm is refused too, which is the same class of
+fault one level down.
+
+**The small verification, two locations per city, before any full capture.**
+
+| city | location | resolved sensor | parameter | hours | median |
+| --- | ---: | ---: | --- | ---: | ---: |
+| New York | 384 | 673 | pm25/µg/m³ | 165 | 10.40 |
+| New York | 625 | 1097 | pm25/µg/m³ | 166 | 6.05 |
+| Delhi | 17 | 35 | pm25/µg/m³ | 0 | no hours |
+| Delhi | 50 | 396 | pm25/µg/m³ | 0 | no hours |
+| Madrid | 4274 | 10378 | pm25/µg/m³ | 68 | 9.00 |
+| Madrid | 4275 | 10382 | pm25/µg/m³ | 67 | 11.00 |
+| Tokyo | 1214487 | 6518561 | pm25/µg/m³ | 153 | 12.00 |
+| Tokyo | 1214508 | 6516165 | pm25/µg/m³ | 147 | 10.00 |
+| Berlin | 2993 | 1300115 | pm25/µg/m³ | 138 | 6.79 |
+| Berlin | 3019 | 1300119 | pm25/µg/m³ | 138 | 6.90 |
+| Los Angeles | 1948 | 25551 | pm25/µg/m³ | 168 | 10.45 |
+| Los Angeles | 7936 | 25196 | pm25/µg/m³ | 69 | 8.70 |
+
+Every location resolved, every resolved sensor is `pm25` in µg/m³, and every
+median is a plausible urban PM2.5 concentration. New York reads 10.40 and 6.05
+where the faulty apparatus read 0.03 and 0.02, which was ozone.
+
+**And Tokyo and Los Angeles serve.** Both were reported as returning nothing at
+all, and that observation was the whole basis of the withdrawn contract defect
+six. Tokyo location 1214487 serves 153 hours of the control window and Los Angeles
+1948 serves 168. The withdrawal was correct and is now positively confirmed rather
+than merely prudent: the contract's admission premise was never tested, and the
+first evidence about it points the other way.
+
+Delhi's two sampled locations serve no hours, which is now a real observation
+about those two locations rather than an artifact. What it means for Delhi overall
+is not inferred from two.
+
+The instrument is verified. The last permitted reconciliation run will be made
+over a capture taken with it.
+
 ## Post-project findings, recorded and not built
 
 Things worth fixing that this project will not fix. Section 2 of the contract

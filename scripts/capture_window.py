@@ -53,7 +53,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 from collections import Counter
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -420,6 +420,7 @@ def build_artifact(
     now: datetime,
     voided: list[dict[str, Any]] | None = None,
     gate: Counter[str] | None = None,
+    resolution: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """The dated evidence artifact, in the form the admission artifact established."""
     voided = voided if voided is not None else []
@@ -468,6 +469,9 @@ def build_artifact(
         # without counting cannot report whether it ever fired. The first capture
         # did filter without counting, which is recorded in ADR-0009.
         "validity_gate": dict(sorted((gate or Counter()).items())),
+        # How many admitted locations resolved to a PM2.5 sensor, and why any did
+        # not. Recorded because the fault this repairs was invisible in the values.
+        "sensor_resolution": resolution or {},
     }
 
 
@@ -497,7 +501,12 @@ def build_parser(choices: tuple[str, ...]) -> argparse.ArgumentParser:
 
 
 def main(argv: list[str] | None = None) -> int:
-    from climate_index.adapters.openaq.admission import admitted_sensors, load_artifact
+    from climate_index.adapters.openaq.admission import (
+        SensorIdentityError,
+        admitted_locations,
+        load_artifact,
+        resolve_pm25_sensor,
+    )
     from climate_index.config import get_settings
 
     settings = get_settings()
@@ -519,20 +528,48 @@ def main(argv: list[str] | None = None) -> int:
 
     window = settings.reconciliation_windows[args.window]
     artifact = load_artifact(settings.station_admission_version or None)
-    admitted = admitted_sensors(artifact)
+    admitted = admitted_locations(artifact)
     sensors = [
         {
-            "sensor_id": sensor.sensor_id,
-            "station_id": sensor.station_id,
-            "city": sensor.city,
-            "region": sensor.region,
+            "sensor_id": location.pm25_sensor_id,
+            "station_id": location.station_id,
+            "city": location.city,
+            "region": location.region,
         }
-        for sensor in admitted
+        for location in resolved
     ]
 
     station_log, model_log = CallLog(), CallLog()
     gate: Counter[str] = Counter()
+    resolve_log = CallLog()
+    resolution: dict[str, Any] = {}
+    resolved: list[Any] = []
     try:
+        # Resolve every admitted location to its PM2.5 sensor, and assert that
+        # each really measures pm25 in the expected units. This step did not
+        # exist for the whole of T2: a location id was used where a sensor id
+        # belonged, and the provider answered with unrelated sensors, three New
+        # York stations returning ozone in ppm recorded as PM2.5. The assertion
+        # is the repair; the lookup is only plumbing (ADR-0009).
+        resolver = PacedClient(resolve_log, {"X-API-Key": key})
+        refused: dict[str, str] = {}
+        for location in admitted:
+            payload = resolver.get(f"{base_url.rstrip('/')}/locations/{location.location_id}")
+            try:
+                sensor_id = resolve_pm25_sensor(payload, location.location_id)
+            except SensorIdentityError as bad:
+                refused[str(location.location_id)] = str(bad)
+                continue
+            resolved.append(replace(location, pm25_sensor_id=sensor_id))
+        resolution = {
+            "locations_admitted": len(admitted),
+            "resolved_to_pm25_sensor": len(resolved),
+            "refused": len(refused),
+            "refusals": dict(sorted(refused.items())),
+            "call_log": resolve_log.as_dict(),
+        }
+        if not resolved:
+            raise CaptureFault("no admitted location resolved to a PM2.5 sensor")
         stations = fetch_station_side(
             PacedClient(station_log, {"X-API-Key": key}),
             base_url,
@@ -584,7 +621,8 @@ def main(argv: list[str] | None = None) -> int:
         stations=stations,
         models=models,
         admission_version=str(artifact.get("derived_at", ""))[:10],
-        sensor_ids=[sensor.sensor_id for sensor in admitted],
+        sensor_ids=[int(loc.pm25_sensor_id or 0) for loc in resolved],
+        resolution=resolution,
         station_log=station_log,
         model_log=model_log,
         now=now,
