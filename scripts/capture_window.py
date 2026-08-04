@@ -231,6 +231,7 @@ def station_rows(
     payload: dict[str, Any],
     sensor: dict[str, Any],
     gate: Counter[str] | None = None,
+    misaligned: dict[str, int] | None = None,
 ) -> list[dict[str, Any]]:
     """Turn one page of hourly rows into E-8 shaped dicts, applying only validity.
 
@@ -262,6 +263,18 @@ def station_rows(
             continue
         if moment is None or not isinstance(value, int | float):
             tally["malformed"] += 1
+            continue
+        if moment.minute or moment.second or moment.microsecond:
+            # Not a gate on admissibility: a gate on whether this is an hour at
+            # all. The frozen alignment quantifies over the half-open hour
+            # [H, H+1) and pairs on H, and a period anchored at :30 is not
+            # [H, H+1) for any integer H, so the rule defines no comparison for
+            # it and there is no H on the model side to pair it with. Rejecting
+            # applies the rule; it does not extend it (ADR-0009).
+            tally["period_not_hour_aligned"] += 1
+            offcut = misaligned if misaligned is not None else {}
+            key = f"{sensor['city']}/{sensor['station_id']}"
+            offcut[key] = offcut.get(key, 0) + 1
             continue
         if entry.get("hasFlags"):
             tally["has_flags_true"] += 1
@@ -313,6 +326,7 @@ def fetch_station_side(
     start: datetime,
     end: datetime,
     gate: Counter[str] | None = None,
+    misaligned: dict[str, int] | None = None,
 ) -> list[dict[str, Any]]:
     """One paged call chain per admitted sensor over the window."""
     rows: list[dict[str, Any]] = []
@@ -320,7 +334,7 @@ def fetch_station_side(
         page = 1
         while True:
             payload = client.get(station_url(base_url, int(sensor["sensor_id"]), start, end, page))
-            batch = station_rows(payload, sensor, gate)
+            batch = station_rows(payload, sensor, gate, misaligned)
             rows += batch
             found = payload.get("meta", {}).get("found")
             if len(payload.get("results", [])) < PAGE_LIMIT:
@@ -362,6 +376,15 @@ def model_rows(
     return rows
 
 
+def _by_city_counts(misaligned: dict[str, int]) -> dict[str, int]:
+    """Off-hour row counts folded to the city, from "city/station" keys."""
+    out: dict[str, int] = {}
+    for key, count in misaligned.items():
+        city = key.split("/", 1)[0]
+        out[city] = out.get(city, 0) + count
+    return dict(sorted(out.items()))
+
+
 def bounds(rows: list[dict[str, Any]]) -> dict[str, Any]:
     """The realized timestamp span of what actually landed, and the row count.
 
@@ -389,9 +412,13 @@ def assert_inside_window(rows: list[dict[str, Any]], start: datetime, end: datet
         if not (start <= datetime.fromisoformat(row["ts"].replace("Z", "+00:00")) < end)
     ]
     if stray:
+        # The window bounds are deliberately not interpolated here. This message
+        # lands in a committed void record, and the control window's exclusive
+        # end is the holdout's first date, so spelling it would put a holdout
+        # date into evidence. The offending timestamp is enough to diagnose with.
         raise CaptureFault(
-            f"{len(stray)} captured rows fall outside the requested window "
-            f"[{_iso(start)}, {_iso(end)}), first {stray[0]}"
+            f"{len(stray)} captured rows fall outside the requested window; "
+            f"earliest offender {stray[0]}"
         )
 
 
@@ -421,6 +448,7 @@ def build_artifact(
     voided: list[dict[str, Any]] | None = None,
     gate: Counter[str] | None = None,
     resolution: dict[str, Any] | None = None,
+    misaligned: dict[str, int] | None = None,
 ) -> dict[str, Any]:
     """The dated evidence artifact, in the form the admission artifact established."""
     voided = voided if voided is not None else []
@@ -472,6 +500,15 @@ def build_artifact(
         # How many admitted locations resolved to a PM2.5 sensor, and why any did
         # not. Recorded because the fault this repairs was invisible in the values.
         "sensor_resolution": resolution or {},
+        # Which stations reported hourly periods anchored off the hour, and how
+        # many rows each contributed. Named per station and per city because the
+        # confound-in-the-population risk has bitten twice: if the excluded rows
+        # sit mostly in one city, the exclusion changes that city's coverage.
+        "period_not_hour_aligned": {
+            "rows": sum((misaligned or {}).values()),
+            "by_station": dict(sorted((misaligned or {}).items())),
+            "by_city": _by_city_counts(misaligned or {}),
+        },
     }
 
 
@@ -532,6 +569,7 @@ def main(argv: list[str] | None = None) -> int:
 
     station_log, model_log = CallLog(), CallLog()
     gate: Counter[str] = Counter()
+    misaligned: dict[str, int] = {}
     resolve_log = CallLog()
     resolution: dict[str, Any] = {}
     resolved: list[Any] = []
@@ -579,6 +617,7 @@ def main(argv: list[str] | None = None) -> int:
             window.start,
             window.end,
             gate,
+            misaligned,
         )
         models: list[dict[str, Any]] = []
         model_client = PacedClient(model_log)

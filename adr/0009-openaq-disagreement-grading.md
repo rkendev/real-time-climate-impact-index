@@ -1883,6 +1883,87 @@ is not inferred from two.
 The instrument is verified. The last permitted reconciliation run will be made
 over a capture taken with it.
 
+## Capture attempt 3, voided: periods anchored off the hour
+
+Diagnosed 2026-08-04, before repair. The repaired instrument ran to completion and
+then refused at the window assertion: 21 rows fell outside
+`[2026-07-17T00:00Z, 2026-07-24T00:00Z)`, the first at `2026-07-16T23:30:00Z`.
+Nothing was kept.
+
+**That is a half-hour boundary.** Three known-good sensors were checked directly,
+Berlin 1300115, New York 673 and Tokyo 6518561, and all three return
+`label='1hour'`, `interval='01:00:00'`, `from=…T00:00:00Z to=…T01:00:00Z`, with
+zero off-hour rows. A minority of sensors report hourly rollups anchored at `:30`,
+and the provider returns one when its period overlaps the requested start.
+
+### Why rejecting them applies the frozen rule rather than extending it
+
+This distinction carries the whole decision, and without it the change reads
+exactly like a validity rule added after seeing the data.
+
+`hasFlags == false` and `observedCount >= 1` are **admissibility** filters. They
+select among rows that **are** hours. The frozen temporal alignment is a different
+kind of statement: it quantifies over the half-open hour `[H, H+1)` and pairs the
+two sources **on H**. A period of `[23:30, 00:30)` is not `[H, H+1)` for any
+integer `H`. It is not the thing the rule quantifies over, and there is no `H` to
+pair it with, because the model side has values only on the hour. **The rule
+defines no comparison for such a period.** Rejecting it is applying the rule. It
+is not a new gate.
+
+**The alternative, and why it is refused.** A row anchored at `:30` could be
+assigned to the nearest `H`. That would invent an alignment convention the
+contract does not contain, after seeing the data, and in the direction that
+**retains rows** and therefore helps D2's evaluability. That direction is the
+whole reason it cannot be taken. The contract's alignment is explicit and it is
+not this project's to extend when extending it would be convenient.
+
+### The end boundary is what actually matters here
+
+The first offending row was `2026-07-16T23:30:00Z`, before the window start, which
+looks like a tidiness problem. **The same anchoring at the other end produces a
+period `[2026-07-23T23:30Z, 2026-07-24T00:30Z)`, which contains thirty minutes of
+holdout time.**
+
+Had off-hour periods been kept, a control capture would have imported holdout
+minutes through a rounding convention nobody wrote down, and no declaration
+anywhere would have said so. **Rejecting non-hour-aligned periods is therefore
+part of what keeps the seal intact at the boundary**, not housekeeping.
+
+It is worth being plain about how narrowly this was caught. The realized-bounds
+assertion is what refused, and it exists only because it was added when the
+capture artifact was designed. The declared-window check alone would have passed:
+the run asked for the control window and was labelled the control window. Only
+comparing what actually landed against the window caught it.
+
+### The exclusion is reported per sensor and per city
+
+Sensors so a reader can re-query them, and cities because the
+confound-in-the-population risk has now bitten twice. If the `:30`-anchored
+sensors sit mostly in one city, the exclusion changes that city's coverage and
+could remove it from the comparison entirely, which is a fact about the population
+and not about the rule. The capture artifact now carries
+`period_not_hour_aligned` with total rows, a per-station breakdown and a per-city
+fold, and the per-city coverage figures are reported before and after the
+exclusion.
+
+### A stopping condition for capture voids, stated as mine and not the contract's
+
+The contract caps **reconciliation runs**, not captures, and the definition pinned
+above makes captures inputs. Nothing in the contract therefore stops a
+re-capture-until-it-works pattern, and an uncapped loop is worth closing before it
+becomes one.
+
+**This is operational discipline I am adopting, not a contract provision.** Every
+capture void carries a diagnosed cause written before its repair, which is what
+distinguishes the two so far: attempt 1 was a doubled version segment, attempt 2
+was periods anchored off the hour. **At a third void I stop and reassess rather
+than re-capture**, and reassessing means reporting the three diagnoses and asking
+whether the instrument can be trusted at all, not adjusting one more thing and
+trying again.
+
+Spent so far: 0 reconciliation runs of the 1 remaining. Capture voids: 2, both
+diagnosed.
+
 ## Post-project findings, recorded and not built
 
 Things worth fixing that this project will not fix. Section 2 of the contract

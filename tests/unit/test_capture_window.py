@@ -422,3 +422,59 @@ def test_the_gate_tally_accounts_for_every_returned_row() -> None:
     station_rows(payload, SENSOR, gate)
     removed = sum(v for k, v in gate.items() if k not in ("returned", "retained"))
     assert gate["returned"] == gate["retained"] + removed
+
+
+# --- hour alignment: applying the frozen rule, not extending it ----------------
+
+
+def test_a_period_anchored_off_the_hour_is_rejected_and_counted() -> None:
+    """Not a new validity gate. The frozen alignment quantifies over [H, H+1).
+
+    hasFlags and observedCount filter admissible hours from among rows that are
+    hours. A period anchored at :30 is not [H, H+1) for any integer H, so the
+    rule defines no comparison for it and there is no H on the model side to pair
+    it with. Rejecting applies the rule.
+    """
+    from collections import Counter
+
+    from capture_window import station_rows
+
+    off = INSIDE.replace(minute=30)
+    payload = {"results": [_hour(_stamp(INSIDE), 12.5), _hour(_stamp(off), 9.9)]}
+    gate: Counter[str] = Counter()
+    misaligned: dict[str, int] = {}
+    rows = station_rows(payload, SENSOR, gate, misaligned)
+    assert len(rows) == 1
+    assert rows[0]["ts"] == _stamp(INSIDE)
+    assert gate["period_not_hour_aligned"] == 1
+    assert misaligned == {"Amsterdam/s-11": 1}
+
+
+def test_the_off_hour_rejection_keeps_the_seal_at_the_window_end() -> None:
+    """The end boundary is the part that matters, and it is not tidiness.
+
+    A period anchored at :30 straddling the control window's exclusive end
+    contains thirty minutes of holdout time. Keeping such a row would import
+    holdout minutes into a control capture through a rounding convention nobody
+    wrote down.
+    """
+    from collections import Counter
+
+    from capture_window import station_rows
+
+    straddling = END.replace(minute=30) - timedelta(hours=1)
+    assert straddling < END < straddling + timedelta(hours=1)
+    gate: Counter[str] = Counter()
+    rows = station_rows({"results": [_hour(_stamp(straddling), 11.0)]}, SENSOR, gate, {})
+    assert rows == []
+    assert gate["period_not_hour_aligned"] == 1
+
+
+def test_off_hour_counts_fold_to_cities_so_a_concentration_is_visible() -> None:
+    """If the exclusion sits mostly in one city it changes that city's coverage."""
+    from capture_window import _by_city_counts
+
+    assert _by_city_counts({"Madrid/a": 3, "Madrid/b": 2, "Delhi/c": 1}) == {
+        "Delhi": 1,
+        "Madrid": 5,
+    }

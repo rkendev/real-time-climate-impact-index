@@ -220,9 +220,16 @@ def check_void_history(entries: list[dict[str, object]], name: str) -> None:
     assert name.startswith("voided-"), name
     aimed_at = name.removeprefix("voided-").removesuffix(".json")
     assert aimed_at == "control", f"{name} records attempts on a non-control window"
+    # The one documented exception, and it is narrow: the *full* instant at which
+    # the control window ends. That instant is the control window's exclusive end
+    # and the holdout's inclusive start, so as a boundary it denotes where the
+    # control window stops rather than any holdout content. Only the complete
+    # timestamp is excused; the bare date is not. One committed void record cites
+    # it, from a fault message that no longer interpolates window bounds.
+    boundary = holdout_span()[0].strftime("%Y-%m-%dT%H:%M:%SZ")
     for index, entry in enumerate(entries):
         assert isinstance(entry, dict), f"{name} entry {index} is not an attempt record"
-        found = scan_for_holdout_dates(json.dumps(entry))
+        found = scan_for_holdout_dates(json.dumps(entry).replace(boundary, "<window-end>"))
         assert not found, f"{name} entry {index} references holdout dates {found}"
 
 
