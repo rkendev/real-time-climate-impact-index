@@ -206,6 +206,102 @@ def test_the_artifact_names_the_endpoint_and_why_it_is_not_the_archive() -> None
     assert "archive" in source and "computed mean" in source
 
 
+# --- voided attempts, and why they are recorded rather than discarded ----------
+
+
+def test_a_voided_attempt_is_recorded_and_its_data_removed(tmp_path, monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    """One clean run or void and start again. The attempt survives, the data does not.
+
+    A capture assembled from two runs would carry a status distribution
+    describing two runs and timestamp bounds that could straddle them. So the
+    partial data is deleted, and the attempt is written down instead: a record
+    showing two attempts and one capture is more honest than one showing a
+    capture.
+    """
+    import capture_window
+
+    monkeypatch.setattr(capture_window, "EVIDENCE_DIR", tmp_path / "evidence")
+    monkeypatch.setattr(capture_window, "CAPTURE_DIR", tmp_path / "capture")
+    partial = tmp_path / "capture" / "control"
+    partial.mkdir(parents=True)
+    (partial / "station.jsonl").write_text('{"ts": "x"}\n')
+
+    log = capture_window.CallLog()
+    log.record(200)
+    log.record(429)
+    capture_window.record_void("control", "returned 429", log, capture_window.CallLog())
+
+    assert not partial.exists(), "a voided attempt left its data on disk"
+    history = capture_window.void_history("control")
+    assert len(history) == 1
+    assert history[0]["reason"] == "returned 429"
+    assert history[0]["station"]["rate_limited"] is True
+    assert history[0]["station"]["statuses"] == {"200": 1, "429": 1}
+
+
+def test_a_second_void_appends_rather_than_replacing(tmp_path, monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    """Otherwise the history says one attempt however many there were."""
+    import capture_window
+
+    monkeypatch.setattr(capture_window, "EVIDENCE_DIR", tmp_path / "evidence")
+    monkeypatch.setattr(capture_window, "CAPTURE_DIR", tmp_path / "capture")
+    log = capture_window.CallLog()
+    capture_window.record_void("control", "first", log, log)
+    capture_window.record_void("control", "second", log, log)
+    assert [entry["reason"] for entry in capture_window.void_history("control")] == [
+        "first",
+        "second",
+    ]
+
+
+def test_no_void_history_reads_as_empty_rather_than_failing(tmp_path, monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    import capture_window
+
+    monkeypatch.setattr(capture_window, "EVIDENCE_DIR", tmp_path / "evidence")
+    assert capture_window.void_history("control") == []
+
+
+def test_the_artifact_carries_the_void_history_even_when_it_is_empty() -> None:
+    """Absent and empty are different claims about how many runs were voided."""
+    assert _artifact()["voided_attempts"] == []
+
+
+# --- rate-limit headers, recorded from the run --------------------------------
+
+
+def test_rate_limit_headers_are_kept_from_the_first_and_last_response() -> None:
+    from capture_window import CallLog
+
+    log = CallLog()
+    log.record(200, {"x-ratelimit-remaining": "59"})
+    log.record(200, {"x-ratelimit-remaining": "31"})
+    log.record(200, {"x-ratelimit-remaining": "4"})
+    record = log.as_dict()
+    assert record["rate_limit_at_start"] == {"x-ratelimit-remaining": "59"}
+    assert record["rate_limit_at_end"] == {"x-ratelimit-remaining": "4"}
+
+
+def test_an_unsent_rate_limit_block_is_absent_rather_than_zeroed() -> None:
+    """A field that cannot be filled from what happened is omitted, not assumed."""
+    from capture_window import CallLog
+
+    log = CallLog()
+    log.record(200)
+    record = log.as_dict()
+    assert "rate_limit_at_start" not in record
+    assert "rate_limit_at_end" not in record
+    assert record["calls"] == 1
+
+
+def test_only_the_documented_rate_limit_headers_are_recorded() -> None:
+    """The artifact is committed, so it carries no header nobody asked for."""
+    from capture_window import _rate_limit
+
+    kept = _rate_limit({"x-ratelimit-remaining": "9", "set-cookie": "session=secret"})
+    assert kept == {"x-ratelimit-remaining": "9"}
+    assert _rate_limit(None) == {}
+
+
 # --- the window is named, never dated -----------------------------------------
 
 

@@ -32,7 +32,13 @@ Two things the artifact records that a declaration alone would not give:
   not, and the frozen licence rule bites on committed raw values. Counts,
   timestamps and statuses only.
 
-Usage: OPENAQ_API_KEY=... python scripts/capture_window.py --window control
+A capture is one clean run or it is voided and re-run from scratch. On any
+fault or interruption, whatever landed is deleted and the attempt is appended to
+a voided-attempt history beside the artifact. Stitching two partial runs together
+would produce a status distribution describing two runs and timestamp bounds that
+could straddle them, and neither would describe anything that happened.
+
+Usage: CII_OPENAQ_API_KEY=... python scripts/capture_window.py --window control
 """
 
 from __future__ import annotations
@@ -73,24 +79,52 @@ class CaptureFault(RuntimeError):
     """The capture could not be completed for a reason that is not a measurement."""
 
 
+# The rate-limit headers the provider documents. Recorded at the first and the
+# last response of a run, so how much headroom there was at the start and how
+# much was left at the end are both facts about this run rather than estimates.
+RATE_LIMIT_HEADERS = (
+    "x-ratelimit-limit",
+    "x-ratelimit-remaining",
+    "x-ratelimit-used",
+    "x-ratelimit-reset",
+)
+
+
 @dataclass
 class CallLog:
     """Every response's status, so a zero can be told from a failure."""
 
     statuses: Counter[int] = field(default_factory=Counter)
     rate_limited: bool = False
+    first_headers: dict[str, str] | None = None
+    last_headers: dict[str, str] | None = None
 
-    def record(self, status: int) -> None:
+    def record(self, status: int, headers: dict[str, str] | None = None) -> None:
         self.statuses[status] += 1
         if status == 429:
             self.rate_limited = True
+        if headers:
+            if self.first_headers is None:
+                self.first_headers = headers
+            self.last_headers = headers
 
     def as_dict(self) -> dict[str, Any]:
-        return {
+        """What actually happened. A field absent means it was never observed.
+
+        The rate-limit blocks are omitted rather than defaulted when the provider
+        sent no such header, because an empty block and a block of zeros are
+        different claims and only one of them would be true.
+        """
+        record: dict[str, Any] = {
             "calls": sum(self.statuses.values()),
             "statuses": {str(code): count for code, count in sorted(self.statuses.items())},
             "rate_limited": self.rate_limited,
         }
+        if self.first_headers:
+            record["rate_limit_at_start"] = self.first_headers
+        if self.last_headers:
+            record["rate_limit_at_end"] = self.last_headers
+        return record
 
 
 class PacedClient:
@@ -108,10 +142,10 @@ class PacedClient:
         request = urllib.request.Request(url, headers=self._headers)
         try:
             with urllib.request.urlopen(request, timeout=60) as response:
-                self._log.record(response.status)
+                self._log.record(response.status, _rate_limit(response.headers))
                 payload = json.loads(response.read())
         except urllib.error.HTTPError as error:
-            self._log.record(error.code)
+            self._log.record(error.code, _rate_limit(error.headers))
             raise CaptureFault(f"{url.split('?')[0]} returned {error.code}") from error
         except urllib.error.URLError as error:
             self._log.record(0)
@@ -123,8 +157,56 @@ class PacedClient:
         return payload
 
 
+def _rate_limit(headers: Any) -> dict[str, str]:
+    """The provider's rate-limit headers, as sent. Absent ones are simply absent."""
+    if headers is None:
+        return {}
+    return {
+        name: str(headers.get(name)) for name in RATE_LIMIT_HEADERS if headers.get(name) is not None
+    }
+
+
 def _iso(moment: datetime) -> str:
     return moment.astimezone(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def void_history(name: str) -> list[dict[str, Any]]:
+    """Voided attempts at this window, read back from the record they were written to.
+
+    A capture is one clean run or it is voided and re-run from scratch. Stitching
+    two partial runs together would give a status distribution describing two runs
+    and timestamp bounds that could straddle them, and neither would describe
+    anything that happened. So a voided attempt is deleted from the data and
+    written to this history instead: the run did happen, and a record showing four
+    attempts and one capture is more honest than one showing a capture.
+    """
+    path = EVIDENCE_DIR / f"voided-{name}.json"
+    if not path.is_file():
+        return []
+    loaded = json.loads(path.read_text())
+    return loaded if isinstance(loaded, list) else []
+
+
+def record_void(name: str, reason: str, station_log: CallLog, model_log: CallLog) -> Path:
+    """Append a voided attempt, and remove whatever it left on disk."""
+    EVIDENCE_DIR.mkdir(parents=True, exist_ok=True)
+    path = EVIDENCE_DIR / f"voided-{name}.json"
+    history = void_history(name)
+    history.append(
+        {
+            "voided_at": _iso(datetime.now(UTC)),
+            "reason": reason,
+            "station": station_log.as_dict(),
+            "model": model_log.as_dict(),
+        }
+    )
+    path.write_text(json.dumps(history, indent=2, sort_keys=True) + "\n")
+    root = CAPTURE_DIR / name
+    if root.is_dir():
+        for child in root.iterdir():
+            child.unlink()
+        root.rmdir()
+    return path
 
 
 def _parse_hour(value: Any) -> datetime | None:
@@ -306,8 +388,10 @@ def build_artifact(
     station_log: CallLog,
     model_log: CallLog,
     now: datetime,
+    voided: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """The dated evidence artifact, in the form the admission artifact established."""
+    voided = voided if voided is not None else []
     per_city: dict[str, dict[str, int]] = {}
     for row in stations:
         per_city.setdefault(row["city"], {"station_rows": 0, "model_rows": 0})["station_rows"] += 1
@@ -343,6 +427,10 @@ def build_artifact(
             "pace_seconds_between_calls": PACE_SECONDS,
         },
         "per_city": dict(sorted(per_city.items())),
+        # Every attempt that was voided before this one succeeded. Present even
+        # when empty, because "no attempt was voided" and "voided attempts were
+        # not recorded" are different claims.
+        "voided_attempts": voided,
     }
 
 
@@ -379,10 +467,13 @@ def main(argv: list[str] | None = None) -> int:
     choices = tuple(sorted(settings.reconciliation_windows))
     args = build_parser(choices).parse_args(argv)
 
-    key = os.environ.get("OPENAQ_API_KEY", "")
+    # Either name works: the settings key, which is what the adapter reads, or
+    # the bare operator name the admission recomputation established. Never a
+    # tracked file (INV-1).
+    key = settings.openaq_api_key or os.environ.get("OPENAQ_API_KEY", "")
     if not key:
-        print("OPENAQ_API_KEY is not set. It is a secret and belongs in the", file=sys.stderr)
-        print("environment, never in a tracked file.", file=sys.stderr)
+        print("No API key. Set CII_OPENAQ_API_KEY or OPENAQ_API_KEY. It is a", file=sys.stderr)
+        print("secret and belongs in the environment, never in a tracked file.", file=sys.stderr)
         return 2
     base_url = settings.openaq_base_url
     if not base_url:
@@ -435,9 +526,14 @@ def main(argv: list[str] | None = None) -> int:
                 f"one side of the capture is empty: {len(stations)} station rows, "
                 f"{len(models)} model rows"
             )
-    except CaptureFault as fault:
-        print(f"capture fault, run blocked: {fault}", file=sys.stderr)
-        print("Diagnose this in writing before any repair. It is not a finding.", file=sys.stderr)
+    except (CaptureFault, KeyboardInterrupt) as fault:
+        # Voided, not resumed. Whatever landed is deleted and the attempt is
+        # written to the history, so a later reader sees the attempt rather than
+        # a capture that quietly came from two runs at different times.
+        path = record_void(args.window, str(fault) or type(fault).__name__, station_log, model_log)
+        print(f"capture voided, nothing kept: {fault}", file=sys.stderr)
+        print(f"attempt recorded in {path.relative_to(REPO_ROOT)}", file=sys.stderr)
+        print("Re-run from scratch. Do not resume.", file=sys.stderr)
         return 2
 
     root = write_capture(args.window, stations, models)
@@ -453,6 +549,7 @@ def main(argv: list[str] | None = None) -> int:
         station_log=station_log,
         model_log=model_log,
         now=now,
+        voided=void_history(args.window),
     )
     EVIDENCE_DIR.mkdir(parents=True, exist_ok=True)
     path = EVIDENCE_DIR / f"{now.date().isoformat()}-{args.window}.json"

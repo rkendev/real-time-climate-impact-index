@@ -1016,6 +1016,48 @@ writing before any repair, a third fault shipping the project as "the measuremen
 could not be completed" with the three diagnoses. A fault is not a rate, and none
 of this makes a blocked run into a finding.
 
+## Follow-up: the fifth contract defect, and the first internal one
+
+Recorded 2026-08-04, before the control window was captured.
+
+Section 5 of `PREREGISTRATION.md` names the station source twice and the two do
+not agree. Its capture paragraph says the capture is "drawn from the OpenAQ
+archive". Its temporal alignment paragraph says the station side is "the
+`/v3/sensors/{id}/hours` value for the half-open hour `[H, H+1)`". Those are
+different inputs, not two descriptions of one.
+
+**The resolution: the endpoint binds and the archive is not an admissible source
+for a station value.** The archive carries raw irregular instants, so drawing from
+it means computing every hourly value locally. That would make every station a
+computed mean, which destroys the provider-hourly against computed-mean breakdown
+the contract requires as a reported output and collapses the one axis on which the
+CPCB construction confound is visible at all. It would also mean a frozen rule was
+set aside because a keyless route was cheaper, which is the shape of decision this
+project exists not to make. So the key is required and there is no keyless route to
+a station value.
+
+**The contract is not amended.** As with the four before it, the freeze commit
+stays untouched; the reading is recorded here and in `30_plan.md`, before the
+capture rather than during it.
+
+**Why this one is different from the other four.** The earlier defects were the
+contract being wrong about the world: a superseded constant, an attribution slip,
+a propagation path through the wrong carrier, a description of the codebase that
+was never checked. This one is the contract being inconsistent with itself, and
+nothing outside the document was needed to find it.
+
+**Why it went unnoticed.** The contract was reviewed hard for its external
+citations, and later, after the fourth defect, for its claims about the codebase.
+It was never once read end to end against itself. A document that says two
+different things about the same input is a document nobody read that way, and the
+review effort had been spent entirely on whether it agreed with things outside it.
+
+The reusable lesson sits beside the fourth defect's rather than replacing it. That
+one said a pre-registration describing an existing system must verify its
+description of that system. This one says a pre-registration must also be read
+against itself, because internal contradiction needs no external source to detect
+and no amount of external verification will surface it.
+
 ## Post-project findings, recorded and not built
 
 Things worth fixing that this project will not fix. Section 2 of the contract
