@@ -17,12 +17,13 @@ datetimes, the ``Confidence`` enum), so consumers see one contract across stores
 
 from __future__ import annotations
 
+import json
 from collections.abc import Mapping
 from decimal import Decimal
 from typing import Any
 
 from climate_index.adapters.aws._keys import canonical_window_key, to_aware_utc
-from climate_index.core.models import Confidence
+from climate_index.core.models import Confidence, PM25DisagreementState, ProvenanceTier
 
 # The partition key, the sort key, and the plain window_end attribute.
 PARTITION_KEY = "region"
@@ -58,6 +59,22 @@ def to_item(record: Mapping[str, Any]) -> dict[str, Any]:
     value = record.get("model_pm25_ugm3")
     if value is not None:
         item["model_pm25_ugm3"] = Decimal(str(float(value)))
+    # E-10 and E-11. Plain attributes, never key attributes, so no table
+    # definition changes: the partition key stays region and the sort key stays
+    # window_start, and a key change would be a table replacement rather than a
+    # migration. Written on every reconciled row because the states are required;
+    # a row that was never reconciled still says NOT_COMPARED and UNCHECKED
+    # rather than omitting them, which is a different claim from an absent
+    # optional measurement.
+    item["pm25_disagreement"] = str(record["pm25_disagreement"])
+    item["provenance_tier"] = str(record["provenance_tier"])
+    item["flagged_city_count"] = int(record["flagged_city_count"])
+    item["covered_city_count"] = int(record["covered_city_count"])
+    item["city_comparisons"] = json.dumps(
+        [dict(comparison) for comparison in record.get("city_comparisons", ())],
+        default=str,
+        sort_keys=True,
+    )
     return item
 
 
@@ -73,6 +90,24 @@ def from_item(item: Mapping[str, Any]) -> dict[str, Any]:
         record[field] = float(item[field])
     value = item.get("model_pm25_ugm3")
     record["model_pm25_ugm3"] = None if value is None else float(value)
+    # The legacy mapping for this store, in one visible place. An item written
+    # before these attributes existed has none, and their absence means the
+    # window was never compared and its coverage was never examined, which is
+    # what the two documented states say. Not a model default, so that "never
+    # reconciled" and "reconciled and not comparable" stay distinguishable
+    # (NFR-DQ4).
+    state = item.get("pm25_disagreement")
+    record["pm25_disagreement"] = (
+        PM25DisagreementState.NOT_COMPARED if state is None else PM25DisagreementState(str(state))
+    )
+    tier = item.get("provenance_tier")
+    record["provenance_tier"] = (
+        ProvenanceTier.UNCHECKED if tier is None else ProvenanceTier(str(tier))
+    )
+    record["flagged_city_count"] = int(item.get("flagged_city_count") or 0)
+    record["covered_city_count"] = int(item.get("covered_city_count") or 0)
+    raw = item.get("city_comparisons")
+    record["city_comparisons"] = tuple(json.loads(str(raw))) if raw else ()
     return record
 
 

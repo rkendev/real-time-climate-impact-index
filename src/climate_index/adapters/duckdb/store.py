@@ -27,6 +27,7 @@ import duckdb
 from climate_index.adapters.duckdb._schema import (
     ADDED_COLUMNS,
     AGGREGATE_COLUMNS,
+    legacy_states,
     to_aware_utc,
     to_naive_utc,
 )
@@ -77,6 +78,18 @@ class DuckDBAggregateStore:
             str(record["confidence"]),
             # Nullable: None stays None rather than becoming a number.
             None if record.get("model_pm25_ugm3") is None else float(record["model_pm25_ugm3"]),
+            str(record["pm25_disagreement"]),
+            str(record["provenance_tier"]),
+            int(record["flagged_city_count"]),
+            int(record["covered_city_count"]),
+            # One JSON column, not a second table. Serialized here and parsed
+            # back at the read boundary, which is the only place the shape is
+            # interpreted.
+            json.dumps(
+                [dict(comparison) for comparison in record.get("city_comparisons", ())],
+                default=str,
+                sort_keys=True,
+            ),
         ]
         placeholders = ", ".join(["?"] * len(AGGREGATE_COLUMNS))
         self._con.execute(f"INSERT OR REPLACE INTO climate_index VALUES ({placeholders})", values)
@@ -93,7 +106,7 @@ class DuckDBAggregateStore:
             record = dict(zip(AGGREGATE_COLUMNS, row, strict=True))
             record["window_start"] = to_aware_utc(record["window_start"])
             record["window_end"] = to_aware_utc(record["window_end"])
-            rows.append(record)
+            rows.append(legacy_states(record))
         return rows
 
     def close(self) -> None:

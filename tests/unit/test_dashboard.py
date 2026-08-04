@@ -34,7 +34,12 @@ import pytest
 
 from climate_index.adapters.duckdb import DuckDBAggregateStore, DuckDBReadOnlyAggregateStore
 from climate_index.config import Settings, get_settings
-from climate_index.core.models import ClimateIndexRecord, Confidence
+from climate_index.core.models import (
+    ClimateIndexRecord,
+    Confidence,
+    PM25DisagreementState,
+    ProvenanceTier,
+)
 from climate_index.labels import verbal_label
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -147,6 +152,10 @@ def _seed_store(tmp_path: Path) -> Path:
             dryness_index=0.5,
             pollution_index=0.5,
             confidence=grade,
+            pm25_disagreement=PM25DisagreementState.NOT_COMPARED,
+            provenance_tier=ProvenanceTier.UNCHECKED,
+            flagged_city_count=0,
+            covered_city_count=0,
         )
         writer.upsert(record.model_dump(mode="python"))
     writer.close()

@@ -14,7 +14,12 @@ import duckdb
 import pytest
 
 from climate_index.adapters.duckdb import DuckDBAggregateStore, DuckDBReadOnlyAggregateStore
-from climate_index.core.models import ClimateIndexRecord, Confidence
+from climate_index.core.models import (
+    ClimateIndexRecord,
+    Confidence,
+    PM25DisagreementState,
+    ProvenanceTier,
+)
 
 TS_START = datetime(2026, 7, 19, 12, 0, tzinfo=UTC)
 TS_END = datetime(2026, 7, 19, 12, 30, tzinfo=UTC)
@@ -31,6 +36,10 @@ def _seed(db_path: Path) -> None:
         dryness_index=0.5,
         pollution_index=0.5,
         confidence=Confidence.MEASURED,
+        pm25_disagreement=PM25DisagreementState.NOT_COMPARED,
+        provenance_tier=ProvenanceTier.UNCHECKED,
+        flagged_city_count=0,
+        covered_city_count=0,
     )
     store.upsert(record.model_dump(mode="python"))
     store.close()

@@ -53,7 +53,12 @@ def percentile(sorted_values: list[float], quantile: float) -> float:
 
 def seed_windows(store: AggregateStore, region: str, count: int = _MIN_WINDOWS) -> int:
     """Write ``count`` consecutive windows for ``region``; return the count."""
-    from climate_index.core.models import ClimateIndexRecord, Confidence
+    from climate_index.core.models import (
+        ClimateIndexRecord,
+        Confidence,
+        PM25DisagreementState,
+        ProvenanceTier,
+    )
 
     base = datetime(2026, 7, 19, 0, 0, tzinfo=UTC)
     for index in range(count):
@@ -67,6 +72,13 @@ def seed_windows(store: AggregateStore, region: str, count: int = _MIN_WINDOWS) 
             dryness_index=0.5,
             pollution_index=0.5,
             confidence=Confidence.MEASURED,
+            # This measures read latency, not reconciliation. The row is written
+            # unreconciled and says so rather than carrying a state it did not
+            # earn.
+            pm25_disagreement=PM25DisagreementState.NOT_COMPARED,
+            provenance_tier=ProvenanceTier.UNCHECKED,
+            flagged_city_count=0,
+            covered_city_count=0,
         )
         store.upsert(record.model_dump(mode="python"))
     return count

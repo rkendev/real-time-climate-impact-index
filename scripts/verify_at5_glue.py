@@ -66,7 +66,12 @@ def verify_iceberg_idempotent(
 
 def _sample_record(settings: Settings) -> dict[str, Any]:
     """A deterministic aggregate record for the first configured region."""
-    from climate_index.core.models import ClimateIndexRecord, Confidence
+    from climate_index.core.models import (
+        ClimateIndexRecord,
+        Confidence,
+        PM25DisagreementState,
+        ProvenanceTier,
+    )
 
     region = settings.region_list[0]
     record = ClimateIndexRecord(
@@ -78,6 +83,13 @@ def _sample_record(settings: Settings) -> dict[str, Any]:
         dryness_index=0.5,
         pollution_index=0.5,
         confidence=Confidence.MEASURED,
+        # AT-5 proves the write is idempotent on the natural key. The row is
+        # written unreconciled and says so rather than carrying a state it did
+        # not earn.
+        pm25_disagreement=PM25DisagreementState.NOT_COMPARED,
+        provenance_tier=ProvenanceTier.UNCHECKED,
+        flagged_city_count=0,
+        covered_city_count=0,
     )
     return record.model_dump(mode="python")
 

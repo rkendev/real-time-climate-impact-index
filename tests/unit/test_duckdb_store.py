@@ -11,7 +11,12 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from climate_index.adapters.duckdb import DuckDBAggregateStore, DuckDBRawStore
-from climate_index.core.models import ClimateIndexRecord, Confidence
+from climate_index.core.models import (
+    ClimateIndexRecord,
+    Confidence,
+    PM25DisagreementState,
+    ProvenanceTier,
+)
 from climate_index.interfaces import AggregateStore, RawStore
 
 
@@ -25,6 +30,10 @@ def _record(window_hour: int, impact: float, region: str = "EUR") -> dict[str, o
         dryness_index=0.6,
         pollution_index=0.575,
         confidence=Confidence.MEASURED,
+        pm25_disagreement=PM25DisagreementState.NOT_COMPARED,
+        provenance_tier=ProvenanceTier.UNCHECKED,
+        flagged_city_count=0,
+        covered_city_count=0,
     )
     return record.model_dump(mode="python")
 

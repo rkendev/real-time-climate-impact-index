@@ -17,6 +17,8 @@ from climate_index.core.models import (
     Confidence,
     EventEnvelope,
     EventType,
+    PM25DisagreementState,
+    ProvenanceTier,
     QuarantineRecord,
     ReasonCode,
     SatelliteEvent,
@@ -181,23 +183,65 @@ def test_climate_index_record_accepts_valid_row() -> None:
         dryness_index=0.3,
         pollution_index=0.2,
         confidence=Confidence.MEASURED,
+        pm25_disagreement=PM25DisagreementState.NOT_COMPARED,
+        provenance_tier=ProvenanceTier.UNCHECKED,
+        flagged_city_count=0,
+        covered_city_count=0,
     )
     assert record.confidence is Confidence.MEASURED
 
 
 @pytest.mark.parametrize("value", [-0.1, 100.1])
 def test_climate_index_record_rejects_out_of_range_index(value: float) -> None:
+    kwargs: dict[str, object] = {
+        "region": "EUR",
+        "window_start": UTC_TS,
+        "window_end": UTC_TS + timedelta(minutes=30),
+        "impact_index": 50.0,
+        "temperature_anomaly": 0.0,
+        "dryness_index": 0.0,
+        "pollution_index": 0.0,
+        "confidence": Confidence.INFERRED,
+        "pm25_disagreement": PM25DisagreementState.NOT_COMPARED,
+        "provenance_tier": ProvenanceTier.UNCHECKED,
+        "flagged_city_count": 0,
+        "covered_city_count": 0,
+    }
+    # The no-fault control, for the same reason it exists on E-3 above: without
+    # it, adding a required field to E-5 turns every case here into a pass that
+    # asserts only that the field was missing.
+    ClimateIndexRecord(**kwargs)  # type: ignore[arg-type]
+    kwargs["impact_index"] = value
     with pytest.raises(ValidationError):
-        ClimateIndexRecord(
-            region="EUR",
-            window_start=UTC_TS,
-            window_end=UTC_TS + timedelta(minutes=30),
-            impact_index=value,
-            temperature_anomaly=0.0,
-            dryness_index=0.0,
-            pollution_index=0.0,
-            confidence=Confidence.INFERRED,
-        )
+        ClimateIndexRecord(**kwargs)  # type: ignore[arg-type]
+
+
+def test_climate_index_record_requires_both_reconciliation_states() -> None:
+    """Required with no default, so a row cannot omit what it is (E-10, E-11).
+
+    A default would make "never reconciled" and "reconciled and found not
+    comparable" the same value on every row, and telling those apart is what the
+    no-inherited-grade rule needs. The mapping for rows written before the fields
+    existed happens at each store's read boundary instead, where it is visible.
+    """
+    for omitted in ("pm25_disagreement", "provenance_tier"):
+        kwargs: dict[str, object] = {
+            "region": "EUR",
+            "window_start": UTC_TS,
+            "window_end": UTC_TS + timedelta(minutes=30),
+            "impact_index": 42.0,
+            "temperature_anomaly": 1.5,
+            "dryness_index": 0.3,
+            "pollution_index": 0.2,
+            "confidence": Confidence.MEASURED,
+            "pm25_disagreement": PM25DisagreementState.NOT_COMPARED,
+            "provenance_tier": ProvenanceTier.UNCHECKED,
+            "flagged_city_count": 0,
+            "covered_city_count": 0,
+        }
+        del kwargs[omitted]
+        with pytest.raises(ValidationError, match=omitted):
+            ClimateIndexRecord(**kwargs)  # type: ignore[arg-type]
 
 
 def test_quarantine_record_accepts_valid_row() -> None:

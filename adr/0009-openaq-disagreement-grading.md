@@ -695,6 +695,110 @@ than 192. A region configured with no city is now refused at construction by bot
 sources, because an empty city list would have produced weather-only windows that
 read as thinned coverage rather than as a misconfiguration.
 
+## T3a: the exclusion period ended, and what replaced the control
+
+Recorded 2026-08-04. This is the dated record the negative-space control was
+built to produce.
+
+**The control went red before it was deleted, and this is what it said.** Both
+its assertions fired, naming what had appeared:
+
+```
+reconciliation settings exist during T2: ['mqo_alpha', 'mqo_beta',
+  'mqo_reference_value_ugm3', 'mqo_relative_uncertainty_at_reference']
+reconciliation machinery exists during T2: ['core/models.py:81
+  PM25DisagreementState', 'core/reconciliation.py:53 mqo_tolerance',
+  'core/reconciliation.py:124 reconcile', 'core/reconciliation.py:160
+  _reconcile_one']
+```
+
+Recorded verbatim because it is the evidence that the exclusion ended by intent
+rather than by decay. A control that was quietly removed while still green would
+leave no way to tell the two apart.
+
+**The successor landed in the same commit.** `tests/hygiene/test_holdout_not_opened.py`
+exists before `tests/hygiene/test_no_reconciliation_yet.py` is gone, in one
+commit, because that commit is where the risk peaks: comparison becomes possible
+for the first time and the only automated guard against it disappears in the same
+breath. A retirement that leaves a gap is worse than no retirement.
+
+It no longer forbids comparison. It forbids comparison over the holdout, in four
+independent ways, and each was proven red by making the violation and watching
+the failure rather than by watching a pass:
+
+1. the entry point requires an explicit window and has no default;
+2. the holdout is not nameable. The settings object holds one window and the
+   entry point accepts only what it holds, and there is deliberately no
+   `--window-start` or `--window-end`, so a holdout date is not expressible
+   through the interface at all;
+3. no holdout capture exists on disk, checked both by what the artifacts declare
+   and by the observation timestamps they actually wrote;
+4. no holdout date appears on the run surface.
+
+The forbidden range is parsed out of the contract rather than restated, so the
+rule lives in one place. The test also forbids itself from naming a holdout date,
+and that assertion fired on its own documentation comment during development,
+which is the smallest possible demonstration that it works.
+
+**A defect in the first version of the successor, found by the red proof.** The
+run-surface scan enumerated files with `git ls-files`, which lists tracked files
+only. A reconciliation entry point is a new and therefore untracked file when it
+first appears, so the scan was not reading it at all: a holdout date appended to
+`scripts/reconcile.py` passed. The scan now uses `--cached --others
+--exclude-standard`, which covers uncommitted files while still honouring
+`.gitignore`, and it went from 0 to 116 files on the run surface.
+
+Recorded because of what found it. The green was indistinguishable from a working
+control, and running the violation was the only thing that told them apart. This
+is the fourth time in this project that a guard passing by absence turned out to
+be passing over nothing, after the AST walk, the fixture that could not move a
+grade, and the parameterization that asserted only a missing field.
+
+**The single authority, made enforceable.** Section 9 makes the settings object
+the authority and forbids a constant in adapter code, so the numbers now live in
+two places. `tests/hygiene/test_settings_match_contract.py` closes that by parsing
+`PREREGISTRATION.md` out of the repository and asserting the settings match
+sections 4.1 and 5. Parsing rather than restating inline was chosen because
+restating copies the numbers into a third place, which is the problem the test
+exists to solve. Three things keep the parse honest: structural assertions that
+run before any value is read, an anti-vacuity test that runs the same parser over
+a document with different values, and a freeze assertion that
+`git log -- PREREGISTRATION.md` still returns exactly one commit and that it is
+`b81f1c9`. That last one turns this ADR's prose claim about the freeze into a
+mechanical one that runs on every test invocation, including after the control
+rate has been seen.
+
+**A second schema change, on the record.** `ClimateIndexRecord` gains five fields,
+not two. The contract's union rule requires the flagged-city count to be recorded,
+and D1 requires both values to be reported, which is per city because the
+comparison is per city. So the record carries the state, the tier,
+`flagged_city_count`, `covered_city_count`, and `city_comparisons`. The per-city
+detail is one JSON column rather than a second table: a table would introduce a
+second natural key and therefore a second idempotency proof, and the frozen scope
+admits neither.
+
+`covered_city_count` is redundant with the detail, deliberately. It is D2's
+denominator and the figure the 200-city-window precondition is tested against, so
+it is established by two derivations that must agree: the summed scalar, and a
+count over the per-city detail that round-trips through JSON encoding in every
+store. A single common-mode error cannot satisfy both. Without it that number
+would have been produced by parsing a JSON blob with nothing checking the parse.
+
+**No key moved, in any of the three stores.** The DynamoDB partition and sort keys
+are unchanged and the new fields are plain attributes; the Iceberg identifier
+fields stay `[1, 2, 3]` and the new fields take ids 10 to 14 as optional, reusing
+and reordering nothing; the local store appends to `ADDED_COLUMNS` and migrates in
+place. Confirmed before the fields were written rather than after, because a key
+change in either cloud store is a table replacement and not a migration.
+
+**The two states are required with no default.** A default would make "never
+reconciled" and "reconciled and found not comparable" the same value on every row,
+and telling those apart is exactly what the no-inherited-grade rule needs. Rows
+written before the fields existed carry neither, and each store maps their absence
+onto the two documented states once, at its read boundary, where the mapping is
+visible. Requiring them also caught two call sites the suite did not: the AT-5 and
+NFR-P3 verify scripts both construct records, and mypy named them immediately.
+
 ## Post-project findings, recorded and not built
 
 Things worth fixing that this project will not fix. Section 2 of the contract

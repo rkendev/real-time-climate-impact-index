@@ -18,11 +18,12 @@ the Glue catalog on AWS differ only in those properties, not in this code.
 
 from __future__ import annotations
 
+import json
 from collections.abc import Mapping, Sequence
 from typing import TYPE_CHECKING, Any
 
 from climate_index.adapters.aws._keys import canonical_window_dt, to_aware_utc
-from climate_index.core.models import Confidence
+from climate_index.core.models import Confidence, PM25DisagreementState, ProvenanceTier
 
 if TYPE_CHECKING:
     from climate_index.config import Settings
@@ -97,6 +98,7 @@ class IcebergAggregateStore:
         from pyiceberg.schema import Schema
         from pyiceberg.types import (
             DoubleType,
+            LongType,
             NestedField,
             StringType,
             TimestamptzType,
@@ -115,6 +117,20 @@ class IcebergAggregateStore:
             # Optional, because rows written before this field existed carry no
             # value and backfilling the shipped index is out of scope.
             NestedField(9, "model_pm25_ugm3", DoubleType(), required=False),
+            # E-10 and E-11 and the three fields that support them. Optional for
+            # the same reason as field 9: rows written before they existed carry
+            # no value, and backfilling the shipped index is out of scope. New
+            # field ids only, so nothing above is reused or reordered, and the
+            # identifier fields are unchanged: the natural key still decides what
+            # a MERGE matches, so replay stays idempotent (AT-5).
+            NestedField(10, "pm25_disagreement", StringType(), required=False),
+            NestedField(11, "provenance_tier", StringType(), required=False),
+            NestedField(12, "flagged_city_count", LongType(), required=False),
+            NestedField(13, "covered_city_count", LongType(), required=False),
+            # The per-city detail as a JSON string, matching the local store's
+            # one-column choice rather than introducing a nested type that only
+            # one of the three backends could express the same way.
+            NestedField(14, "city_comparisons", StringType(), required=False),
             identifier_field_ids=[1, 2, 3],
         )
 
@@ -148,6 +164,19 @@ class IcebergAggregateStore:
             # Nullable: None stays None rather than becoming a number.
             "model_pm25_ugm3": (
                 None if record.get("model_pm25_ugm3") is None else float(record["model_pm25_ugm3"])
+            ),
+            # E-10 and E-11. Written on every row, including an unreconciled one,
+            # which states NOT_COMPARED and UNCHECKED rather than leaving the
+            # column null: never reconciled and reconciled-and-not-comparable are
+            # different claims and the row makes which one it is explicit.
+            "pm25_disagreement": str(record["pm25_disagreement"]),
+            "provenance_tier": str(record["provenance_tier"]),
+            "flagged_city_count": int(record["flagged_city_count"]),
+            "covered_city_count": int(record["covered_city_count"]),
+            "city_comparisons": json.dumps(
+                [dict(comparison) for comparison in record.get("city_comparisons", ())],
+                default=str,
+                sort_keys=True,
             ),
         }
         arrow_table = pa.Table.from_pylist([row], schema=table.schema().as_arrow())
@@ -183,4 +212,22 @@ class IcebergAggregateStore:
             record[field] = float(row[field])
         value = row.get("model_pm25_ugm3")
         record["model_pm25_ugm3"] = None if value is None else float(value)
+        # The legacy mapping for this store, in one visible place. A row written
+        # before these fields existed reads back null, and null means the window
+        # was never compared and its coverage was never examined, which is what
+        # the two documented states say.
+        state = row.get("pm25_disagreement")
+        record["pm25_disagreement"] = (
+            PM25DisagreementState.NOT_COMPARED
+            if state is None
+            else PM25DisagreementState(str(state))
+        )
+        tier = row.get("provenance_tier")
+        record["provenance_tier"] = (
+            ProvenanceTier.UNCHECKED if tier is None else ProvenanceTier(str(tier))
+        )
+        record["flagged_city_count"] = int(row.get("flagged_city_count") or 0)
+        record["covered_city_count"] = int(row.get("covered_city_count") or 0)
+        raw = row.get("city_comparisons")
+        record["city_comparisons"] = tuple(json.loads(str(raw))) if raw else ()
         return record

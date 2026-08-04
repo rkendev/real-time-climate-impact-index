@@ -25,6 +25,8 @@ from climate_index.core.features import (
 )
 from climate_index.core.models import (
     ClimateIndexRecord,
+    PM25DisagreementState,
+    ProvenanceTier,
     SatelliteEvent,
     StationObservation,
     WeatherEvent,
@@ -99,6 +101,17 @@ def compute_records(
                 pollution_index=pollution,
                 confidence=grade_confidence(len(bucket.weather), len(bucket.satellite), settings),
                 model_pm25_ugm3=model_pm25,
+                # The index knows nothing about stations, so these are the
+                # truthful states for a record at this point and not
+                # placeholders: nothing was compared, and no coverage was
+                # examined. UC-8 runs after this and replaces them from the
+                # station stream. A record that skipped reconciliation therefore
+                # says so rather than carrying a state it did not earn.
+                pm25_disagreement=PM25DisagreementState.NOT_COMPARED,
+                provenance_tier=ProvenanceTier.UNCHECKED,
+                flagged_city_count=0,
+                covered_city_count=0,
+                city_comparisons=(),
             )
         )
     return records

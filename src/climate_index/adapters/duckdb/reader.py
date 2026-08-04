@@ -19,7 +19,11 @@ from typing import Any
 
 import duckdb
 
-from climate_index.adapters.duckdb._schema import AGGREGATE_COLUMNS, to_aware_utc
+from climate_index.adapters.duckdb._schema import (
+    AGGREGATE_COLUMNS,
+    legacy_states,
+    to_aware_utc,
+)
 
 
 class DuckDBReadOnlyAggregateStore:
@@ -59,7 +63,7 @@ class DuckDBReadOnlyAggregateStore:
                 record[column] = None
             record["window_start"] = to_aware_utc(record["window_start"])
             record["window_end"] = to_aware_utc(record["window_end"])
-            rows.append(record)
+            rows.append(legacy_states(record))
         return rows
 
     def close(self) -> None:

@@ -64,6 +64,23 @@ The aggregate row, one per region per closed window (FR-6).
 - model_pm25_ugm3: float or null, the mean model PM2.5 across the window's satellite events for the region, in micrograms per cubic metre. Null where the window held no satellite event, and null on every row written before this field existed, because backfilling the shipped index is out of scope. It is a reported summary and is not the input to the disagreement comparison, which the contract evaluates at city granularity (E-9); nothing here is a second, region-level statement of a frozen rule.
 - pm25_disagreement: a PM2.5DisagreementState (E-10), required (NFR-DQ3).
 - provenance_tier: a ProvenanceTier (E-11), required (NFR-DQ4).
+- flagged_city_count: integer, zero or more, required. How many of the window's covered cities were flagged. The contract requires the flagged-city count to be recorded alongside the union rule that sets the region's state, so it is a field and not a derivation.
+- covered_city_count: integer, zero or more, required. How many of the window's cities had qualifying coverage. Carried so the provenance tier can be recomputed from what the row itself holds rather than trusted: a tier that cannot be rechecked against its own inputs cannot be shown not to have been inherited (NFR-DQ4).
+- city_comparisons: a list of CityComparison (E-12), possibly empty. Empty where the window was never reconciled.
+- Both state fields are required and neither has a default. A default would make "never reconciled" and "reconciled and found not comparable" the same value on every row, and telling those apart is what NFR-DQ4 needs. Rows written before these fields existed carry none of them; each store maps their absence onto NOT_COMPARED and UNCHECKED once, at its read boundary, where the mapping is visible rather than implicit in the model.
+
+### E-12 CityComparison
+
+One city-window's comparison (E-9), carried on the region-window record of E-5 rather than persisted as its own table. A separate table would introduce a second natural key and therefore a second idempotency proof, which is outside the frozen scope.
+
+- city: string, required, the sampling point compared (E-7).
+- station_pm25_ugm3: float or null. The combined station value for the hour, by the aggregation the contract freezes. Null where the city-window had no qualifying station, which is not the same as zero.
+- model_pm25_ugm3: float or null. The model value for the same city-window.
+- tolerance: float or null. The value of the frozen tolerance at this station value, recorded so a reader can see why the state fell as it did without recomputing it. Null where no comparison was made.
+- station_count: integer, zero or more, required. How many stations qualified, so that a count below the frozen minimum is visible rather than inferred from the state.
+- state: a PM2.5DisagreementState (E-10), required.
+
+Both values are present on every comparison and neither is ever replaced by the other, averaged with it, or preferred. This shape is what makes "reported, never resolved" (NFR-DQ3) checkable rather than asserted.
 - Natural key: (region, window_start, window_end). Writes are idempotent on this key (FR-6, NFR-R1): locally via INSERT OR REPLACE, on AWS via an Apache Iceberg MERGE. The key is reproducible across replays because window boundaries are derived from event time by truncation, not from arrival time (see UC-3 and ADR-0002).
 
 ### E-6 QuarantineRecord

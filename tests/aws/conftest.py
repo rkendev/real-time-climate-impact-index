@@ -39,7 +39,12 @@ from typing import Any
 
 import pytest
 
-from climate_index.core.models import ClimateIndexRecord, Confidence
+from climate_index.core.models import (
+    ClimateIndexRecord,
+    Confidence,
+    PM25DisagreementState,
+    ProvenanceTier,
+)
 
 _REGION = "us-east-1"
 _FAKE_CREDENTIALS = {
@@ -222,6 +227,10 @@ def make_record() -> Any:
             dryness_index=0.6,
             pollution_index=0.575,
             confidence=confidence,
+            pm25_disagreement=PM25DisagreementState.NOT_COMPARED,
+            provenance_tier=ProvenanceTier.UNCHECKED,
+            flagged_city_count=0,
+            covered_city_count=0,
         )
         return record.model_dump(mode="python")
 

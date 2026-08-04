@@ -78,6 +78,38 @@ class Confidence(StrEnum):
     AMBIGUOUS = "AMBIGUOUS"
 
 
+class PM25DisagreementState(StrEnum):
+    """E-10: whether the station and model PM2.5 values agree, scoped to PM2.5.
+
+    Scoped to surface PM2.5 and to nothing else. It does not grade
+    ``pollution_index``, which is built from an aerosol optical depth: a
+    dimensionless column-integrated quantity whose relationship to surface mass
+    concentration turns on boundary layer height, vertical profile and humidity
+    and is not tested here. It does not modify ``confidence`` either.
+
+    AGREED and DISAGREED apply only where both values are present for a covered
+    city-window. NOT_COMPARED applies everywhere else and is a statement about
+    coverage, not a judgement about either source.
+    """
+
+    AGREED = "AGREED"
+    DISAGREED = "DISAGREED"
+    NOT_COMPARED = "NOT_COMPARED"
+
+
+class ProvenanceTier(StrEnum):
+    """E-11: whether a region-window could be independently checked at all.
+
+    UNCHECKED where no qualifying station coverage exists for the window, or
+    where coverage falls below the frozen minimum. It is a documented output
+    state and not an error: whole regions carry it permanently, and the system is
+    required to show that rather than to hide it.
+    """
+
+    STATION_CHECKED = "STATION_CHECKED"
+    UNCHECKED = "UNCHECKED"
+
+
 class ReasonCode(StrEnum):
     """Why an event failed the validation gate (E-6, FR-3)."""
 
@@ -198,6 +230,39 @@ class EventEnvelope(BaseModel):
         )
 
 
+class CityComparison(BaseModel):
+    """One city-window's comparison of a station value against a model value (E-9).
+
+    Carried on the region-window record rather than persisted as its own table.
+    A second table would mean a second natural key and therefore a second
+    idempotency proof, and the frozen scope admits neither.
+
+    Both values are present on every comparison and neither is ever replaced by
+    the other, averaged with it, or preferred: this is the shape that makes
+    "reported, never resolved" checkable rather than asserted. ``tolerance`` is
+    the value of T at this station value, recorded so a reader can see why the
+    state fell the way it did without recomputing it.
+    """
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    city: str
+    # The median of qualifying station hourly values for the hour. None where the
+    # city-window had no qualifying station, which is not the same as zero.
+    station_pm25_ugm3: float | None
+    model_pm25_ugm3: float | None
+    tolerance: float | None
+    # How many stations qualified. Below the frozen minimum the window is not
+    # covered, and the count is kept so that is visible rather than inferred.
+    station_count: int = Field(ge=0)
+    state: PM25DisagreementState
+
+    @property
+    def covered(self) -> bool:
+        """Whether this city-window was compared at all."""
+        return self.state is not PM25DisagreementState.NOT_COMPARED
+
+
 class ClimateIndexRecord(BaseModel):
     """E-5 ClimateIndexRecord: one aggregate row per region per closed window.
 
@@ -222,6 +287,26 @@ class ClimateIndexRecord(BaseModel):
     # index is out of scope. A reported summary, not the input to the
     # disagreement comparison, which is evaluated at city granularity.
     model_pm25_ugm3: float | None = None
+
+    # E-10 and E-11, set by the reconciliation after the index is computed
+    # (UC-8). Required, with no default: a row must state what it is, and a
+    # default would make "never reconciled" indistinguishable from "reconciled
+    # and not comparable", which is exactly the confusion the no-inherited-grade
+    # rule exists to catch. Rows written before these fields existed carry
+    # neither, and the mapping from absent to the two documented states happens
+    # once at each read boundary where it is visible.
+    pm25_disagreement: PM25DisagreementState
+    provenance_tier: ProvenanceTier
+    # The union rule: a region-window carries the state when at least one of its
+    # covered cities is flagged, and the flagged-city count is recorded.
+    flagged_city_count: int = Field(ge=0)
+    # The tier's own input, kept on the row so the tier can be recomputed from
+    # what the row holds instead of trusted. A tier that cannot be rechecked
+    # against its own inputs cannot be shown not to have been inherited.
+    covered_city_count: int = Field(ge=0)
+    # Per city, both values and the state they produced. Empty where the window
+    # was never reconciled.
+    city_comparisons: tuple[CityComparison, ...] = ()
 
 
 class QuarantineRecord(BaseModel):

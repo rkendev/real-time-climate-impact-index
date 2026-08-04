@@ -9,7 +9,8 @@ export PYTHONPATH := src
 .PHONY: bootstrap hooks hygiene verify-versions lint type-check test infra_up run_producer run_processor smoke ui \
 	tf-fmt tf-validate tf-plan teardown-audit pre-deploy-gate container-smoke \
 	image-build image-push verify-at5 verify-nfr-p3 \
-	vps-demo-up vps-demo-down vps-demo-refresh vps-demo-status
+	vps-demo-up vps-demo-down vps-demo-refresh vps-demo-status \
+	reconcile-control
 
 # Dummy credentials and provider skip flags let terraform validate and plan run
 # with zero AWS contact and zero spend. TF_STACKS is the full set; TF_PLAN_STACKS
@@ -61,10 +62,18 @@ lint:
 type-check:
 	$(BIN)/mypy src app/dashboard.py scripts/teardown_audit.py scripts/verify_at5_glue.py \
 		scripts/verify_nfr_p3.py scripts/recompute_station_admission.py \
+		scripts/reconcile.py \
 		deploy/vps/feed_history.py deploy/vps/publish_snapshot.py
 
 test:
 	$(BIN)/pytest
+
+# Reconcile the control window (UC-8). An apparatus check and not a result: a
+# fault here blocks the run and is diagnosed in writing, never reported as a
+# finding. There is deliberately no reconcile-holdout target, and no way to pass
+# a date: the window is named, and the settings object holds only this one.
+reconcile-control:
+	$(BIN)/python scripts/reconcile.py --window control
 
 # Run the producer against the Kafka adapter path (UC-1). No-op-safe without a
 # broker: with CII_TRANSPORT_BOOTSTRAP_SERVERS unset it logs and exits without

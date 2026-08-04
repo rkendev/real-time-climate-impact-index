@@ -54,6 +54,14 @@ def _record(**overrides: Any) -> dict[str, Any]:
         "pollution_index": 0.3,
         "confidence": "MEASURED",
         "model_pm25_ugm3": 9.4,
+        # E-10 and E-11 are required on the record and are written by every
+        # store. This module is about the model PM2.5 field, so they are set to
+        # the unreconciled states and left alone.
+        "pm25_disagreement": "NOT_COMPARED",
+        "provenance_tier": "UNCHECKED",
+        "flagged_city_count": 0,
+        "covered_city_count": 0,
+        "city_comparisons": (),
     }
     record.update(overrides)
     return record

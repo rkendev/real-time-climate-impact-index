@@ -17,10 +17,11 @@ pointer, never dialled by the code and never a credential.
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from functools import lru_cache
 from pathlib import Path
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # Calendar months in a year. The monthly reference tables below carry exactly
@@ -41,6 +42,31 @@ class CityLocation(BaseModel):
     name: str
     latitude: float = Field(ge=-90, le=90)
     longitude: float = Field(ge=-180, le=180)
+
+
+class WindowSpan(BaseModel):
+    """A half-open measurement window, ``[start, end)``.
+
+    Half-open so that no hour can fall in two windows, which is the property the
+    contract's split depends on. A reconciliation run is pointed at one of these
+    by name and never at a pair of dates, so there is no way to express a window
+    the settings object does not already hold.
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    start: AwareDatetime
+    end: AwareDatetime
+
+    @model_validator(mode="after")
+    def _check_order(self) -> WindowSpan:
+        if self.end <= self.start:
+            raise ValueError(f"window end must follow its start: {self.start} to {self.end}")
+        return self
+
+    def contains(self, moment: datetime) -> bool:
+        """Whether ``moment`` falls inside the half-open span."""
+        return self.start <= moment < self.end
 
 
 class Settings(BaseSettings):
@@ -320,6 +346,45 @@ class Settings(BaseSettings):
     # Which committed admission artifact to read, by derivation date. Empty means
     # the newest. Whatever produces a measurement records the version it used.
     station_admission_version: str = ""
+
+    # The Modelling Quality Objective, frozen in PREREGISTRATION.md section 4.1 and
+    # taken whole. T(O) = beta * U(O), with
+    # U(O) = Ur(RV) * sqrt((1 - a^2) * O^2 + a^2 * RV^2); a city-window is flagged
+    # when |O - M| > T(O). These live here because the contract's section 9 makes
+    # this object the single authority and forbids the constants appearing in
+    # adapter code. They are values in two places, so a test parses them back out
+    # of the contract and fails if the two ever disagree
+    # (tests/hygiene/test_settings_match_contract.py).
+    #
+    # Np and Nnp from the same published table are deliberately absent: they enter
+    # only the annual-average expression, and this project compares hourly values.
+    mqo_relative_uncertainty_at_reference: float = 0.36
+    mqo_reference_value_ugm3: float = 25.0
+    mqo_alpha: float = 0.50
+    mqo_beta: float = 2.0
+
+    # The frozen minimum coverage, decided per window and not per city: a
+    # city-window is covered when at least this many stations report that hour and
+    # pass the validity gate. Three is the smallest value that gives any
+    # robustness, because a median of three tolerates one bad station and a median
+    # of two tolerates none (contract section 5).
+    station_min_per_city_window: int = 3
+
+    # The windows a reconciliation run may be pointed at, by name. There is
+    # deliberately exactly one entry: the control window. The holdout is not
+    # expressible through this object, through the entry point, or anywhere else in
+    # the run surface, so it cannot be reached by a typo, a default or a stray
+    # date. Adding its entry is the act of opening the seal and is its own dated
+    # record. The guard that enforces this is
+    # tests/hygiene/test_holdout_not_opened.py.
+    reconciliation_windows: dict[str, WindowSpan] = Field(
+        default_factory=lambda: {
+            "control": WindowSpan(
+                start=datetime(2026, 7, 17, tzinfo=UTC),
+                end=datetime(2026, 7, 24, tzinfo=UTC),
+            )
+        }
+    )
 
     source_fetch_timeout_s: float = 10.0
 

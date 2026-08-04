@@ -28,7 +28,12 @@ import pytest
 
 from climate_index.adapters.duckdb import DuckDBAggregateStore
 from climate_index.config import Settings
-from climate_index.core.models import ClimateIndexRecord, Confidence
+from climate_index.core.models import (
+    ClimateIndexRecord,
+    Confidence,
+    PM25DisagreementState,
+    ProvenanceTier,
+)
 from climate_index.store_factory import build_readonly_aggregate_store, close_if_supported
 from publish_snapshot import SnapshotError, publish_snapshot, verify_snapshot, write_ahead_log
 
@@ -71,6 +76,10 @@ def _write_snapshot(
                     dryness_index=0.5,
                     pollution_index=0.5,
                     confidence=Confidence.MEASURED,
+                    pm25_disagreement=PM25DisagreementState.NOT_COMPARED,
+                    provenance_tier=ProvenanceTier.UNCHECKED,
+                    flagged_city_count=0,
+                    covered_city_count=0,
                 )
                 store.upsert(record.model_dump(mode="python"))
     finally:
