@@ -287,6 +287,12 @@ class OpenAQStationSource:
             self._skip(_REASON_MALFORMED, sensor)
             return None
 
+        # Possibly unreachable by reality: hasFlags was false on every hour
+        # sampled across every network, and an hour with no samples appears to be
+        # omitted from the results list rather than returned with a zero count.
+        # Kept because a frozen rule with no branch cannot be honoured if the
+        # shape ever appears, but see ADR-0009: this is coverage of a
+        # hypothetical, not of observed behaviour.
         flag_info = row.get("flagInfo") or {}
         if flag_info.get("hasFlags"):
             # The provider's own quality flag is the external authority on

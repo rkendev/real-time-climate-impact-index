@@ -476,6 +476,82 @@ The cross-check earned its place immediately by failing a fixture of mine that h
 `observedCount` of 4 while inheriting `expectedCount` of 1. An invented fixture was
 internally impossible; the transcribed replacement is not.
 
+## A licence breach, confirmed, remedied at HEAD, and not erased
+
+Recorded 2026-08-04.
+
+**What happened.** The frozen rule permits raw station values as fixtures only
+from providers whose licence allows redistribution. Commit b05a40a transcribed a
+real hour from sensor 12234702 at location 5404 into the test fixtures, carrying
+its value, its minimum, its maximum and its standard deviation. Confirmed by
+direct query before this was written rather than assumed from the aggregate
+licence survey: location 5404 is "Pusa, Delhi - IMD", provider CPCB,
+`licenses: null`. Unstated terms are not permissive. The values should not have
+been committed.
+
+**How the rule failed.** It was written as a rule about *the capture*, a step
+that had not yet happened. The breach occurred during a hand transcription while
+building adapter fixtures, which is the same act under a different name. A rule
+attached to an activity cannot catch an instance of that activity under another
+label. That is the lesson, and it is worth more than the fix it prompted.
+
+**The remedy, and its limit stated plainly.** The values are removed from HEAD
+and replaced with invented numbers that preserve the observed *structure*, which
+is knowledge about the API rather than a licensed measurement: the field layout,
+`expectedInterval` reading `01:00:00` on that network, and the arithmetic
+relating `percentComplete` to the counts. No permissively licensed substitute was
+available to transcribe instead, because every EEA, AirNow and Japanese station
+sampled reports `observedCount` of one, so the only observed multi-sample network
+is the one whose terms are unstated.
+
+**Removal at HEAD is the best available remedy and it is not full compliance.**
+The values remain in the public history at b05a40a. History is not rewritten, and
+the reason is worth stating rather than leaving as an omission: this repository
+has been public since before the commit, so the scrub-before-publication move
+available on the sibling project does not exist here, and rewriting public
+history to remove three numbers published under unstated terms would do more
+damage to the record than it repairs. The residue is disclosed, which is the
+remedy this project uses everywhere else.
+
+**The control that now exists.** `tests/hygiene/test_fixture_provenance.py` is
+attached to the artifact rather than to any activity. It asserts that no fixture
+file carries the key header with a value, and that every fixture carrying a
+measured value declares its source station and a licence on an explicit permitted
+list. Both were proven red separately: a planted dummy key fails the first, a
+value declared against a non-permitted station fails the second. Adding a licence
+to the permitted list requires checking its `redistributionAllowed` flag first;
+only ODC-BY has been checked.
+
+## Both frozen validity conditions may be inert, and together they are the rule
+
+The frozen validity condition for a station hour is `hasFlags == false` **and**
+`observedCount >= 1`. Neither half has been observed to fire.
+
+`hasFlags` was false on every hour sampled, across every network. And an hour with
+no samples appears not to be returned at all: absent hours are omitted from the
+results list rather than present with a zero count or a null value, observed
+directly where one Berlin sensor returned 18 hours across a 42 hour range rather
+than 42 rows with 24 of them empty.
+
+If neither half can fire, **validity admits every hour the API returns, and the
+frozen gate is a no-op over this population.** Nothing moves and this is not a
+defect. It changes what a reader should believe the filter is doing, which is why
+it is recorded rather than left to be inferred.
+
+Pre-committed reporting obligation, extending the one already recorded for
+`hasFlags`: during the measurement, count and report together the number of hours
+carrying `hasFlags` true, the number reported with `observedCount` below one, and
+the number returned with a null value. If all three are zero, the finding is that
+the frozen validity gate is inert over this data, and it belongs with the stated
+limits rather than among the results.
+
+The corollary for the code is worth labelling honestly. The adapter branches
+handling a flagged hour, a zero-sample hour and a null value may be unreachable by
+reality, and their tests prove the handling of shapes the API may never produce.
+That is defensible, since a rule with no branch is a rule that cannot be honoured
+if the shape ever appears, but it is coverage of a hypothetical and should not be
+read as coverage of observed behaviour.
+
 ## Post-project findings, recorded and not built
 
 Things worth fixing that this project will not fix. Section 2 of the contract

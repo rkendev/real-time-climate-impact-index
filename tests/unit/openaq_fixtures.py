@@ -20,6 +20,37 @@ from __future__ import annotations
 
 from typing import Any
 
+# Every fixture below that carries a measured value declares where that value
+# came from and under what licence. The frozen rule permits raw station values as
+# fixtures only from providers whose licence allows redistribution, and
+# tests/hygiene/test_fixture_provenance.py enforces this declaration rather than
+# trusting anyone to remember the rule. The rule was originally written for "the
+# capture"; it was broken during a hand transcription, which is the same act
+# under a different name, which is why the control is attached to the artifact
+# and not to the activity.
+#
+# Adding a licence to the permitted list means first checking its
+# redistributionAllowed flag on /v3/licenses. Only ODC-BY has been checked:
+# commercialUseAllowed true, attributionRequired true, shareAlikeRequired false,
+# modificationAllowed true, redistributionAllowed true.
+MEASURED_VALUE_SOURCES: dict[str, dict[str, Any]] = {
+    "HOUR_PROVIDER_HOURLY": {
+        "location_id": 80,
+        "sensor_id": 4235,
+        "provider": "EEA",
+        "licence": "ODC-BY",
+        "note": "attribution required, carried in the README",
+    },
+    # Derived from the entry above by changing one field each, so they inherit
+    # its provenance and its licence.
+    "HOUR_FLAGGED": {"location_id": 80, "provider": "EEA", "licence": "ODC-BY"},
+    "HOUR_NEGATIVE": {"location_id": 80, "provider": "EEA", "licence": "ODC-BY"},
+    "HOUR_NO_SAMPLES": {"location_id": 80, "provider": "EEA", "licence": "ODC-BY"},
+    "HOUR_NULL_VALUE": {"location_id": 80, "provider": "EEA", "licence": "ODC-BY"},
+    # Structure observed, numbers invented. Carries no licensed measurement.
+    "HOUR_COMPUTED_MEAN": {"synthetic": True, "licence": "SYNTHETIC"},
+}
+
 # ---------------------------------------------------------------------------
 # GET /v3/locations  (OBSERVED: location 79, returned in a radius query around
 # the Amsterdam grid point. Reproduced field for field, including the null
@@ -113,32 +144,37 @@ HOUR_PROVIDER_HOURLY: dict[str, Any] = {
     },
 }
 
-# OBSERVED in full: sensor 12234702 (CPCB, Delhi), hour beginning
-# 2026-08-01T02:00Z. That network supplies fifteen minute raw data which the
-# rollup means into an hour, so observedCount runs to four. Two things this
-# response settles that the other one could not. Its expectedInterval reads
-# 01:00:00, correctly, which localises the 24:00:00 nonsense in the EEA
-# response to that sensor rather than to the endpoint. And percentComplete
-# times expectedCount reproduces observedCount exactly here and across the
-# eight hours sampled (4/4 at 100.0, 3/4 at 75.0, 2/4 at 50.0), which is the
-# second route the adapter cross-checks against.
+# SYNTHETIC VALUES, OBSERVED STRUCTURE. This fixture previously carried the real
+# readings of sensor 12234702 at location 5404, "Pusa, Delhi - IMD", whose
+# provider is CPCB and whose licenses field is null. Unstated terms are not
+# permissive, and the frozen rule permits committed raw station values only from
+# providers whose licence allows redistribution, so those numbers should never
+# have been committed. They were removed here; see adr/0009 for the disclosure,
+# including the fact that removal at HEAD is not full compliance because the
+# values remain in the public history.
 #
-# An earlier version of this fixture set observedCount to four while inheriting
-# expectedCount one from the response above. The cross-check caught it, which is
-# the argument for the cross-check in miniature: an invented fixture was
-# internally impossible and a transcribed one is not.
+# What is kept is the *structure*, which is knowledge about the API rather than a
+# licensed measurement: the field layout, expectedInterval reading 01:00:00 on
+# this network (which localises the 24:00:00 nonsense to the other one), and the
+# arithmetic percentComplete = observedCount / expectedCount * 100, which held
+# across every hour sampled. The numbers below are invented to satisfy that
+# arithmetic and nothing else.
+#
+# No permissively licensed multi-sample hour was available to transcribe instead:
+# every EEA, AirNow and Japanese station sampled reported observedCount of one,
+# so the only observed multi-sample network is the one whose terms are unstated.
 HOUR_COMPUTED_MEAN: dict[str, Any] = {
     **HOUR_PROVIDER_HOURLY,
-    "value": 19.9,
+    "value": 20.0,
     "summary": {
-        "min": 15.4,
-        "q02": 15.4,
+        "min": 16.0,
+        "q02": 16.0,
         "q25": 18.0,
-        "median": 20.4,
-        "q75": 21.8,
-        "max": 23.4,
-        "avg": 19.9,
-        "sd": 1.2020815280171329,
+        "median": 20.0,
+        "q75": 22.0,
+        "max": 24.0,
+        "avg": 20.0,
+        "sd": 3.0,
     },
     "coverage": {
         **HOUR_PROVIDER_HOURLY["coverage"],
