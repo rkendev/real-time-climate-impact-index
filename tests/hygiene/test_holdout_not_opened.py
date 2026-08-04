@@ -220,6 +220,29 @@ def test_this_file_names_the_holdout_only_through_the_contract() -> None:
     assert not [date for date in literals if date in holdout_dates()]
 
 
+def test_the_scan_covers_a_file_that_did_not_exist_when_it_was_written() -> None:
+    """The scope is live, not stale, proven by adding a member and watching it grow.
+
+    Non-emptiness is not the check. The failure this control already had was a
+    populated but stale scope: it read 0 files of the entry point while reporting
+    green, because `git ls-files` lists tracked files and a new entry point is
+    untracked. A scan can be looking at a hundred real files and still be looking
+    at the wrong set.
+
+    So a file is created on the run surface and the scope is required to grow by
+    it, and the detector is required to fire on its contents.
+    """
+    start, _ = holdout_span()
+    probe = REPO_ROOT / "scripts" / "_scope_probe.py"
+    try:
+        probe.write_text(f"# {start.strftime('%Y-%m-%d')}\n")
+        assert probe in _tracked_files(), "a new file on the run surface was not scanned"
+        assert scan_for_holdout_dates(probe.read_text()), "the detector did not fire on it"
+    finally:
+        probe.unlink(missing_ok=True)
+    assert probe not in _tracked_files()
+
+
 def test_the_scan_would_notice_a_holdout_date() -> None:
     """The absence checks above must be able to fail, not pass vacuously."""
     start, _ = holdout_span()

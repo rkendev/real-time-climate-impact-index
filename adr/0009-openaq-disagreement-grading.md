@@ -898,6 +898,54 @@ is clean" is the claim that control exists to replace. The key-shaped and header
 scans also gained an anti-vacuity check, since a clean tree and a broken regex
 had until now looked the same.
 
+## T3a: a control's scope is derived, never enumerated
+
+Recorded 2026-08-04, as a standing rule for the rest of this project.
+
+Three controls in this repository have now been green while looking at the wrong
+set of files:
+
+* the pre-commit hygiene gate read tracked files only;
+* the holdout scan used `git ls-files`, which cannot see a brand-new entry point,
+  so it read none of `scripts/reconcile.py` and passed a holdout date appended to
+  it;
+* the fixture provenance scan read a hardcoded tuple, which would have left the
+  next fixture module outside the licence control entirely.
+
+**The failure mode is a populated but stale scope, not an empty one.** In every
+case the scan read real files and reported a real green. Asserting the scope is
+non-empty would have caught none of the three, which is why non-emptiness is not
+the check.
+
+So every control from here on derives its scope by walking the tree or the
+working set, asserts it is non-empty, and **proves coverage by adding a member
+and requiring the control to notice**. The provenance scan now derives from
+`tests/**/*fixtures*.py` and creates a probe file to prove the derivation is
+live; the holdout scan does the same on the run surface. Reverting the provenance
+scan to the tuple written one commit earlier turns its new proof red with "a new
+fixture module was not picked up by the scan", which is what a stale scope looks
+like when something is finally checking for it.
+
+## T3a: the NFR-DQ3 seeded violation
+
+Recorded 2026-08-04. Every guard below has its green path and its red path
+through the same function, because a red proof written against a bespoke
+assertion proves something about the bespoke assertion and nothing about the
+shipped guard.
+
+**The pipeline made to resolve.** The guard recomputes what each source
+actually said from the raw streams and requires the record to carry exactly that,
+rather than checking the record against itself, which would accept any consistent
+lie. Three seeds, because resolution has three shapes that fail independently:
+substitution writes one source's value into the other's place, averaging replaces
+both with a number that is neither, and preference keeps one and drops the other.
+Each is red on its own.
+
+The fourth seeded violation the plan requires, for the widened validation gate
+(FR-3, INV-3, E-4), was closed in T2 at `tests/unit/test_station_boundary.py` and
+is not reopened here. Named so that the plan's list of four does not read as three
+delivered and one forgotten.
+
 ## Post-project findings, recorded and not built
 
 Things worth fixing that this project will not fix. Section 2 of the contract
