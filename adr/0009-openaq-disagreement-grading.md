@@ -946,6 +946,38 @@ The fourth seeded violation the plan requires, for the widened validation gate
 is not reopened here. Named so that the plan's list of four does not read as three
 delivered and one forgotten.
 
+## T3a: the NFR-DQ4 seeded violations, and the meta-test's own red proof
+
+Recorded 2026-08-04.
+
+**Both branches, seeded separately.** The guard recomputes each tier from
+that record's own coverage. Branch one forces a computed tier onto an uncovered
+window, and a second seed forges the coverage count so that a window claiming
+coverage it did not have is caught as well as one carrying a tier it did not
+earn. Branch two carries a previous window's tier forward, and separately copies a
+neighbouring region's.
+
+**The inheritance branch, and why its fixture is load-bearing.** AFR guarantees
+the uncovered branch a witness whether anyone arranges one or not. Inheritance has
+no such guarantee, and it is worse than that: inheritance is invisible whenever
+the inherited tier equals the tier the window would have earned anyway. So the
+guard can only see it over a fixture where the previous window and the
+neighbouring region both differ from the target, and the fixture is therefore part
+of the guard rather than scenery around it.
+
+**The meta-test has its own red proof.** `assert_fixture_can_expose_inheritance`
+states those three properties, and it is itself a guard that would otherwise only
+ever have been seen passing. It is handed three inadequate fixtures, each lacking
+exactly one property, and fails on each separately: one spanning a single tier,
+one where each region is constant over time so no previous-window difference
+exists, and one where every region agrees within each window so no neighbour
+difference exists. A fourth case, the adequate shape, is asserted to pass, because
+three reds mean nothing from a function that rejects everything.
+
+Without that, the thing protecting the inheritance seed from being vacuous would
+itself be unverified, which is the same recursion as a call-site gate that nothing
+checks the call site of.
+
 ## Post-project findings, recorded and not built
 
 Things worth fixing that this project will not fix. Section 2 of the contract
