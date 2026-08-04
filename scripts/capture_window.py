@@ -529,15 +529,6 @@ def main(argv: list[str] | None = None) -> int:
     window = settings.reconciliation_windows[args.window]
     artifact = load_artifact(settings.station_admission_version or None)
     admitted = admitted_locations(artifact)
-    sensors = [
-        {
-            "sensor_id": location.pm25_sensor_id,
-            "station_id": location.station_id,
-            "city": location.city,
-            "region": location.region,
-        }
-        for location in resolved
-    ]
 
     station_log, model_log = CallLog(), CallLog()
     gate: Counter[str] = Counter()
@@ -570,6 +561,17 @@ def main(argv: list[str] | None = None) -> int:
         }
         if not resolved:
             raise CaptureFault("no admitted location resolved to a PM2.5 sensor")
+        # Built only after resolution, so a location whose PM2.5 sensor was never
+        # resolved cannot reach a fetch. Ordering is the guard here.
+        sensors = [
+            {
+                "sensor_id": location.pm25_sensor_id,
+                "station_id": location.station_id,
+                "city": location.city,
+                "region": location.region,
+            }
+            for location in resolved
+        ]
         stations = fetch_station_side(
             PacedClient(station_log, {"X-API-Key": key}),
             base_url,
