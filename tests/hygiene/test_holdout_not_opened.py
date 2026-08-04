@@ -34,7 +34,7 @@ import ast
 import json
 import re
 import subprocess
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
@@ -182,23 +182,74 @@ def test_no_holdout_capture_exists_on_disk() -> None:
         assert {path.name for path in CAPTURE_DIR.iterdir()} <= {"control"}
 
 
-def test_no_capture_artifact_declares_or_contains_a_holdout_hour() -> None:
-    """Both what an artifact says it pulled and what it actually wrote.
+def check_capture_artifact(record: dict[str, object], name: str) -> None:
+    """The detector, shared by the real artifacts and by its own red proof.
 
-    The declared window catches a mislabelled pull. The realized minimum and
-    maximum catch a mis-executed one, which the declaration alone would not.
+    Two assertions, not one. The declared window catches a mislabelled pull. The
+    realized maximum catches a mis-executed one, which the declaration alone
+    would not: metadata saying "control window" is not the same as data that is
+    one.
     """
     start, _ = holdout_span()
-    for artifact in sorted(EVIDENCE_DIR.glob("*.json")) if EVIDENCE_DIR.is_dir() else []:
-        record = json.loads(artifact.read_text())
-        requested = record.get("window_requested", {})
-        assert requested.get("name") == "control", f"{artifact.name} declares a non-control window"
-        for source, bounds in record.get("observed_bounds", {}).items():
-            realized = datetime.fromisoformat(str(bounds["max"]).replace("Z", "+00:00"))
-            assert realized.astimezone(UTC) < start, (
-                f"{artifact.name} wrote a {source} observation at {realized.isoformat()}, "
-                f"which is inside the holdout"
-            )
+    requested = record.get("window_requested") or {}
+    assert isinstance(requested, dict)
+    assert requested.get("name") == "control", f"{name} declares a non-control window"
+    observed = record.get("observed_bounds") or {}
+    assert isinstance(observed, dict)
+    assert observed, f"{name} records no realized bounds, so only its label was checked"
+    for source, bounds in observed.items():
+        assert isinstance(bounds, dict)
+        if bounds.get("max") is None:
+            continue
+        realized = datetime.fromisoformat(str(bounds["max"]).replace("Z", "+00:00"))
+        assert realized.astimezone(UTC) < start, (
+            f"{name} wrote a {source} observation at {realized.isoformat()}, "
+            f"which is inside the holdout"
+        )
+
+
+def _capture_artifacts() -> list[Path]:
+    """Derived by walking, so a new artifact is covered without an edit here."""
+    return sorted(EVIDENCE_DIR.glob("*.json")) if EVIDENCE_DIR.is_dir() else []
+
+
+def test_no_capture_artifact_declares_or_contains_a_holdout_hour() -> None:
+    for artifact in _capture_artifacts():
+        check_capture_artifact(json.loads(artifact.read_text()), artifact.name)
+
+
+def test_the_artifact_check_would_notice_both_ways_of_reaching_the_holdout() -> None:
+    """This absence test passes over zero artifacts today, so it is proven here.
+
+    Before the capture has run there is nothing on disk for the check above to
+    read, which is precisely when an unproven detector is indistinguishable from
+    a working one. Both failure routes are exercised against synthetic records.
+    """
+    start, _ = holdout_span()
+    inside = start.strftime("%Y-%m-%dT%H:%M:%SZ")
+    before = (start.replace(hour=0) - timedelta(hours=1)).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+    good = {
+        "window_requested": {"name": "control"},
+        "observed_bounds": {"station": {"max": before}, "model": {"max": before}},
+    }
+    check_capture_artifact(good, "synthetic-good")
+
+    mislabelled = {**good, "window_requested": {"name": "holdout"}}
+    with pytest.raises(AssertionError, match="declares a non-control window"):
+        check_capture_artifact(mislabelled, "synthetic-mislabelled")
+
+    misexecuted = {
+        "window_requested": {"name": "control"},
+        "observed_bounds": {"station": {"max": inside}, "model": {"max": before}},
+    }
+    with pytest.raises(AssertionError, match="inside the holdout"):
+        check_capture_artifact(misexecuted, "synthetic-misexecuted")
+
+    # An artifact that records no realized bounds at all would otherwise satisfy
+    # the label check and be waved through on its declaration alone.
+    with pytest.raises(AssertionError, match="records no realized bounds"):
+        check_capture_artifact({"window_requested": {"name": "control"}}, "synthetic-bare")
 
 
 def test_no_holdout_date_appears_on_the_run_surface() -> None:

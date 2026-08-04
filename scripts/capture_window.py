@@ -1,0 +1,467 @@
+#!/usr/bin/env python3
+"""Capture one named measurement window from both sources, and record what landed.
+
+Operator tooling, in the shape `recompute_station_admission.py` established:
+argparse, ``main(argv) -> int``, never imported by ``src/``. It is committed
+before it is run, for the same reason that script was: a capture produced by code
+nobody else has is a capture nobody else can reproduce.
+
+**The station side is `/v3/sensors/{id}/hours`, not the S3 archive.** Section 5 of
+the contract names that endpoint for the half-open hour ``[H, H+1)``, and the
+choice is load-bearing rather than incidental. The archive carries raw irregular
+instants, so using it would mean computing the hourly value locally for every
+station. That would make every station a computed mean, which would destroy the
+provider-hourly against computed-mean breakdown the contract requires as a
+reported output, and would collapse the one axis on which the CPCB construction
+confound is visible at all. It would also mean the frozen rule was set aside
+because a keyless route was cheaper. So the key is required and the archive is
+not an admissible source for a station value.
+
+The window is named, never dated. The only accepted names are the keys of
+``settings.reconciliation_windows``, so this script cannot be pointed at a window
+the settings object does not hold, and each window's capture lands under its own
+directory.
+
+Two things the artifact records that a declaration alone would not give:
+
+* the realized minimum and maximum observation timestamp **per source**, so that
+  "we asked for this window" and "what landed is this window" are separately
+  established. Metadata saying "control window" is not the same as data that is
+  one, and only the second catches a mis-executed pull;
+* no measured value, anywhere. The artifact is committed, the captured rows are
+  not, and the frozen licence rule bites on committed raw values. Counts,
+  timestamps and statuses only.
+
+Usage: OPENAQ_API_KEY=... python scripts/capture_window.py --window control
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import os
+import subprocess
+import sys
+import time
+import urllib.error
+import urllib.parse
+import urllib.request
+from collections import Counter
+from dataclasses import dataclass, field
+from datetime import UTC, datetime
+from pathlib import Path
+from typing import Any
+
+REPO_ROOT = Path(__file__).resolve().parents[1]
+CAPTURE_DIR = REPO_ROOT / "data" / "capture"
+EVIDENCE_DIR = REPO_ROOT / "docs" / "evidence" / "capture"
+
+# Published as 60 requests a minute and 2000 an hour, with 429 on exceed and a
+# documented risk of a ban for repeatedly exceeding. Paced below the per-minute
+# limit, the same figure the admission recomputation used.
+PACE_SECONDS = 1.1
+# The station endpoint returns one row per hour, so a seven-day window is 168
+# rows and a single page at this limit. Paging is still implemented, because a
+# silent truncation would look exactly like a sparse sensor.
+PAGE_LIMIT = 1000
+
+OPENAQ_HOURS_PATH = "/v3/sensors/{sensor_id}/hours"
+OPEN_METEO_AIR_QUALITY = "https://air-quality-api.open-meteo.com/v1/air-quality"
+
+
+class CaptureFault(RuntimeError):
+    """The capture could not be completed for a reason that is not a measurement."""
+
+
+@dataclass
+class CallLog:
+    """Every response's status, so a zero can be told from a failure."""
+
+    statuses: Counter[int] = field(default_factory=Counter)
+    rate_limited: bool = False
+
+    def record(self, status: int) -> None:
+        self.statuses[status] += 1
+        if status == 429:
+            self.rate_limited = True
+
+    def as_dict(self) -> dict[str, Any]:
+        return {
+            "calls": sum(self.statuses.values()),
+            "statuses": {str(code): count for code, count in sorted(self.statuses.items())},
+            "rate_limited": self.rate_limited,
+        }
+
+
+class PacedClient:
+    """A paced HTTP client that records every response it receives."""
+
+    def __init__(self, log: CallLog, headers: dict[str, str] | None = None) -> None:
+        self._log = log
+        self._headers = headers or {}
+        self._last = 0.0
+
+    def get(self, url: str) -> dict[str, Any]:
+        wait = PACE_SECONDS - (time.monotonic() - self._last)
+        if wait > 0:
+            time.sleep(wait)
+        request = urllib.request.Request(url, headers=self._headers)
+        try:
+            with urllib.request.urlopen(request, timeout=60) as response:
+                self._log.record(response.status)
+                payload = json.loads(response.read())
+        except urllib.error.HTTPError as error:
+            self._log.record(error.code)
+            raise CaptureFault(f"{url.split('?')[0]} returned {error.code}") from error
+        except urllib.error.URLError as error:
+            self._log.record(0)
+            raise CaptureFault(f"{url.split('?')[0]} did not answer: {error.reason}") from error
+        finally:
+            self._last = time.monotonic()
+        if not isinstance(payload, dict):
+            raise CaptureFault(f"{url.split('?')[0]} returned a non-object body")
+        return payload
+
+
+def _iso(moment: datetime) -> str:
+    return moment.astimezone(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def _parse_hour(value: Any) -> datetime | None:
+    """The start of the half-open hour a row covers, as timezone-aware UTC."""
+    if not isinstance(value, dict):
+        return None
+    text = value.get("utc")
+    if not isinstance(text, str):
+        return None
+    try:
+        return datetime.fromisoformat(text.replace("Z", "+00:00")).astimezone(UTC)
+    except ValueError:
+        return None
+
+
+def station_rows(
+    payload: dict[str, Any],
+    sensor: dict[str, Any],
+) -> list[dict[str, Any]]:
+    """Turn one page of hourly rows into E-8 shaped dicts, applying only validity.
+
+    Validity is the provider's own quality flag and at least one underlying
+    sample, exactly as section 5 freezes it, and nothing else is applied here.
+    Coverage, the median and the tolerance all belong to the reconciliation, and
+    applying any of them at capture time would bake a frozen rule into the data
+    rather than into the code that reads it.
+
+    Negative readings are retained. The frozen rules retain them, and discarding
+    them would bias the station value upward precisely where the tolerance floor
+    dominates.
+    """
+    rows: list[dict[str, Any]] = []
+    for entry in payload.get("results", []):
+        if not isinstance(entry, dict):
+            continue
+        moment = _parse_hour(entry.get("period", {}).get("datetimeFrom"))
+        value = entry.get("value")
+        coverage = entry.get("coverage") or {}
+        observed = coverage.get("observedCount")
+        if moment is None or not isinstance(value, int | float):
+            continue
+        if entry.get("hasFlags"):
+            continue
+        if not isinstance(observed, int) or observed < 1:
+            continue
+        rows.append(
+            {
+                "ts": _iso(moment),
+                "region": sensor["region"],
+                "city": sensor["city"],
+                "station_id": str(sensor["station_id"]),
+                "pm25_ugm3": float(value),
+                "sample_count": int(observed),
+                # Recorded, never gated on. One sample is a provider-validated
+                # hourly value; more than one is a mean the provider computed.
+                "construction": "PROVIDER_HOURLY" if observed == 1 else "COMPUTED_MEAN",
+            }
+        )
+    return rows
+
+
+def fetch_station_side(
+    client: PacedClient,
+    base_url: str,
+    sensors: list[dict[str, Any]],
+    start: datetime,
+    end: datetime,
+) -> list[dict[str, Any]]:
+    """One paged call chain per admitted sensor over the window."""
+    rows: list[dict[str, Any]] = []
+    for sensor in sensors:
+        page = 1
+        while True:
+            query = urllib.parse.urlencode(
+                {
+                    "datetime_from": _iso(start),
+                    "datetime_to": _iso(end),
+                    "limit": PAGE_LIMIT,
+                    "page": page,
+                }
+            )
+            path = OPENAQ_HOURS_PATH.format(sensor_id=sensor["sensor_id"])
+            payload = client.get(f"{base_url.rstrip('/')}{path}?{query}")
+            batch = station_rows(payload, sensor)
+            rows += batch
+            found = payload.get("meta", {}).get("found")
+            if len(payload.get("results", [])) < PAGE_LIMIT:
+                break
+            if isinstance(found, int) and page * PAGE_LIMIT >= found:
+                break
+            page += 1
+    return rows
+
+
+def model_rows(
+    payload: dict[str, Any], region: str, city: str, start: datetime, end: datetime
+) -> list[dict[str, Any]]:
+    """Turn one city's hourly series into E-3 shaped dicts inside the window."""
+    hourly = payload.get("hourly") or {}
+    times = hourly.get("time") or []
+    pm25 = hourly.get("pm2_5") or []
+    rows: list[dict[str, Any]] = []
+    for text, value in zip(times, pm25, strict=False):
+        if value is None:
+            continue
+        moment = datetime.fromisoformat(str(text).replace("Z", "+00:00")).replace(tzinfo=UTC)
+        if not (start <= moment < end):
+            continue
+        rows.append(
+            {
+                "ts": _iso(moment),
+                "region": region,
+                "city": city,
+                # Cloud cover and vegetation are not part of the comparison and
+                # are not fetched for it. Fixed, declared values keep E-3
+                # constructible without implying a measurement was taken.
+                "cloud_cover_pct": 0.0,
+                "vegetation_index": 0.0,
+                "aerosol_index": 0.0,
+                "model_pm25_ugm3": float(value),
+            }
+        )
+    return rows
+
+
+def bounds(rows: list[dict[str, Any]]) -> dict[str, Any]:
+    """The realized timestamp span of what actually landed, and the row count.
+
+    Timestamps and a count only. No measured value appears here, because this
+    goes into a committed artifact and the frozen licence rule bites on committed
+    raw values.
+    """
+    if not rows:
+        return {"rows": 0, "min": None, "max": None}
+    stamps = sorted(row["ts"] for row in rows)
+    return {"rows": len(rows), "min": stamps[0], "max": stamps[-1]}
+
+
+def assert_inside_window(rows: list[dict[str, Any]], start: datetime, end: datetime) -> None:
+    """Every captured row falls in the window the run was pointed at.
+
+    Refused rather than filtered. A capture labelled with one window that quietly
+    contains hours from another is the failure the label exists to prevent, and
+    silently dropping them would hide a provider returning something other than
+    what was asked for.
+    """
+    stray = [
+        row["ts"]
+        for row in rows
+        if not (start <= datetime.fromisoformat(row["ts"].replace("Z", "+00:00")) < end)
+    ]
+    if stray:
+        raise CaptureFault(
+            f"{len(stray)} captured rows fall outside the requested window "
+            f"[{_iso(start)}, {_iso(end)}), first {stray[0]}"
+        )
+
+
+def head_commit() -> str:
+    result = subprocess.run(
+        ["git", "rev-parse", "--short", "HEAD"],
+        cwd=REPO_ROOT,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    return result.stdout.strip() or "unknown"
+
+
+def build_artifact(
+    *,
+    name: str,
+    start: datetime,
+    end: datetime,
+    stations: list[dict[str, Any]],
+    models: list[dict[str, Any]],
+    admission_version: str,
+    sensor_ids: list[int],
+    station_log: CallLog,
+    model_log: CallLog,
+    now: datetime,
+) -> dict[str, Any]:
+    """The dated evidence artifact, in the form the admission artifact established."""
+    per_city: dict[str, dict[str, int]] = {}
+    for row in stations:
+        per_city.setdefault(row["city"], {"station_rows": 0, "model_rows": 0})["station_rows"] += 1
+    for row in models:
+        per_city.setdefault(row["city"], {"station_rows": 0, "model_rows": 0})["model_rows"] += 1
+    return {
+        "schema": "window-capture/1",
+        "derived_at": _iso(now),
+        "derived_by": f"scripts/capture_window.py at commit {head_commit()}",
+        "note": (
+            "A committed, dated record of one capture. The captured rows themselves "
+            "are not committed: the frozen licence rule bites on committed raw "
+            "values, so this artifact carries counts, timestamps and statuses and "
+            "no measured value of any kind."
+        ),
+        "station_source": (
+            "OpenAQ /v3/sensors/{id}/hours, the provider's own hourly value for the "
+            "half-open hour, per section 5. Not the S3 archive: the archive carries "
+            "raw instants, so using it would compute every hourly value locally and "
+            "make every station a computed mean, destroying the construction "
+            "breakdown the contract requires as a reported output."
+        ),
+        "window_requested": {"name": name, "start": _iso(start), "end": _iso(end)},
+        "observed_bounds": {"station": bounds(stations), "model": bounds(models)},
+        "admission": {
+            "version": admission_version,
+            "sensors": len(sensor_ids),
+            "sensor_ids": sorted(sensor_ids),
+        },
+        "run": {
+            "station": station_log.as_dict(),
+            "model": model_log.as_dict(),
+            "pace_seconds_between_calls": PACE_SECONDS,
+        },
+        "per_city": dict(sorted(per_city.items())),
+    }
+
+
+def write_capture(name: str, stations: list[dict[str, Any]], models: list[dict[str, Any]]) -> Path:
+    root = CAPTURE_DIR / name
+    root.mkdir(parents=True, exist_ok=True)
+    for filename, rows in (("station.jsonl", stations), ("model.jsonl", models)):
+        (root / filename).write_text(
+            "".join(json.dumps(row, sort_keys=True) + "\n" for row in rows)
+        )
+    return root
+
+
+def build_parser(choices: tuple[str, ...]) -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--window",
+        required=True,
+        choices=choices,
+        help=(
+            "which configured window to capture. Required, with no default, and "
+            "restricted to the windows the settings object holds. There is no way "
+            "to name a window by date."
+        ),
+    )
+    return parser
+
+
+def main(argv: list[str] | None = None) -> int:
+    from climate_index.adapters.openaq.admission import admitted_sensors, load_artifact
+    from climate_index.config import get_settings
+
+    settings = get_settings()
+    choices = tuple(sorted(settings.reconciliation_windows))
+    args = build_parser(choices).parse_args(argv)
+
+    key = os.environ.get("OPENAQ_API_KEY", "")
+    if not key:
+        print("OPENAQ_API_KEY is not set. It is a secret and belongs in the", file=sys.stderr)
+        print("environment, never in a tracked file.", file=sys.stderr)
+        return 2
+    base_url = settings.openaq_base_url
+    if not base_url:
+        print("CII_OPENAQ_BASE_URL is not set (INV-1: no endpoint literal).", file=sys.stderr)
+        return 2
+
+    window = settings.reconciliation_windows[args.window]
+    artifact = load_artifact(settings.station_admission_version or None)
+    admitted = admitted_sensors(artifact)
+    sensors = [
+        {
+            "sensor_id": sensor.sensor_id,
+            "station_id": sensor.station_id,
+            "city": sensor.city,
+            "region": sensor.region,
+        }
+        for sensor in admitted
+    ]
+
+    station_log, model_log = CallLog(), CallLog()
+    try:
+        stations = fetch_station_side(
+            PacedClient(station_log, {"X-API-Key": key}),
+            base_url,
+            sensors,
+            window.start,
+            window.end,
+        )
+        models: list[dict[str, Any]] = []
+        model_client = PacedClient(model_log)
+        for region, cities in sorted(settings.region_locations.items()):
+            for city in cities:
+                query = urllib.parse.urlencode(
+                    {
+                        "latitude": city.latitude,
+                        "longitude": city.longitude,
+                        "hourly": "pm2_5",
+                        "start_date": window.start.date().isoformat(),
+                        "end_date": (window.end.date().isoformat()),
+                        "timezone": "UTC",
+                    }
+                )
+                payload = model_client.get(f"{OPEN_METEO_AIR_QUALITY}?{query}")
+                models += model_rows(payload, region, city.name, window.start, window.end)
+
+        assert_inside_window(stations, window.start, window.end)
+        assert_inside_window(models, window.start, window.end)
+        if not stations or not models:
+            raise CaptureFault(
+                f"one side of the capture is empty: {len(stations)} station rows, "
+                f"{len(models)} model rows"
+            )
+    except CaptureFault as fault:
+        print(f"capture fault, run blocked: {fault}", file=sys.stderr)
+        print("Diagnose this in writing before any repair. It is not a finding.", file=sys.stderr)
+        return 2
+
+    root = write_capture(args.window, stations, models)
+    now = datetime.now(UTC)
+    record = build_artifact(
+        name=args.window,
+        start=window.start,
+        end=window.end,
+        stations=stations,
+        models=models,
+        admission_version=str(artifact.get("derived_at", ""))[:10],
+        sensor_ids=[sensor.sensor_id for sensor in admitted],
+        station_log=station_log,
+        model_log=model_log,
+        now=now,
+    )
+    EVIDENCE_DIR.mkdir(parents=True, exist_ok=True)
+    path = EVIDENCE_DIR / f"{now.date().isoformat()}-{args.window}.json"
+    path.write_text(json.dumps(record, indent=2, sort_keys=True) + "\n")
+    print(f"captured to {root.relative_to(REPO_ROOT)}")
+    print(f"artifact {path.relative_to(REPO_ROOT)}")
+    print(json.dumps(record["observed_bounds"], indent=2, sort_keys=True))
+    return 0
+
+
+if __name__ == "__main__":  # pragma: no cover - operator entry point
+    raise SystemExit(main())

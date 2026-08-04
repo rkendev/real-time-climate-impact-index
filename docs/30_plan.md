@@ -95,6 +95,23 @@ Work, in order:
 3. Model PM2.5 on the existing adapter. The second half of the comparison, which does not exist today.
 4. Reconciliation. UC-8 proper, with the tolerance and every frozen rule read from the settings object rather than written into adapter code.
 5. Guards. AT-13, plus the three seeded violations required above, plus the no-fault control run.
+
+### The capture, and which station endpoint it is drawn from
+
+Recorded here because the contract's section 5 states it in two places and only one of them is operative, and reading the wrong one would be cheaper.
+
+Section 5's capture paragraph says the capture is drawn "from the OpenAQ archive". Section 5's temporal alignment paragraph says the station side is "the `/v3/sensors/{id}/hours` value for the half-open hour `[H, H+1)`". **The endpoint binds and the S3 archive is not an admissible source for a station value.** The archive carries raw irregular instants, so drawing from it means computing every hourly value locally, which makes every station a computed mean. That destroys the provider-hourly against computed-mean breakdown the contract requires as a reported output, and it collapses the one axis on which the CPCB construction confound is visible at all. It would also mean a frozen rule was set aside because a keyless route was cheaper, which is the shape of decision this project exists to not make. The contract is frozen and is not edited; this is a reading of it, recorded before the capture rather than discovered during it.
+
+So the OpenAQ key is required for the capture and there is no keyless route to a station value.
+
+**Call budget.** Published limits are 60 requests a minute and 2000 an hour, with 429 on exceed. Pacing is 1.1 seconds between calls, about 54 a minute, the figure the admission recomputation already used.
+
+- Station side: one paged call chain per admitted sensor, 208 sensors at the pinned admission version. The endpoint returns one row per hour, so a seven-day window is 168 rows and fits a single page at a limit of 1000; paging is implemented anyway, because a silent truncation would look exactly like a sparse sensor. That is 208 calls in the expected case, about four minutes at the pacing, against 60 a minute and 2000 an hour.
+- Model side: one call per configured sampling point, 12 cities, keyless and on a separate provider limit.
+
+A capture of the holdout in T3b is a second run of the same size and lands as its own dated artifact, so the two are distinguishable and neither can be mistaken for the other.
+
+**The script is committed before it is run.** Same rule as the admission recomputation: a capture produced by code nobody else has is a capture nobody else can reproduce. The fetch is a separate act from the commit that adds `scripts/capture_window.py`.
 6. Presentation and honest limits. UC-5's rendering of the two new states, and the README limits the contract requires to sit above any number.
 
 Exit: the claims in the contract are evaluated exactly once against the sealed holdout and ship against the contract unmodified, whichever way they fall.
