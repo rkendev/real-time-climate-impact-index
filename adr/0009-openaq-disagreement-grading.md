@@ -1151,21 +1151,123 @@ correction had to be defended against, and it would be worse here because the
 observation is of the measurement's own denominator. The rule does not move. What
 moves is the record.
 
-**The consequence is stated in advance of measuring it.** The contract's
-evaluability precondition requires the holdout to contain at least 200 covered
-city-windows, and its ceiling reasoning assumed seven admitted cities times 168
-hours. Coverage also requires at least 3 qualifying stations in a city-window. With
-27 contributing sensors across 6 cities rather than 208 across 8, the covered
-city-window count will be far below what the contract's ceiling reasoning
-supposed. Whether it clears 200 is not computed here and is not guessed at; the
-contract already says that below 200 D2 is NOT EVALUABLE and ships as such rather
-than as a pass or a fail, and that provision now looks considerably more likely to
-fire than it did when it was written. Stating that before the number exists is the
-point.
+**The consequence, computed rather than guessed, and it corrects the guess.** The
+paragraph that stood here predicted that the contract's NOT EVALUABLE provision
+was "considerably more likely to fire than when it was written". That prediction
+was made before the coverage arithmetic was done, and **it is wrong**. The
+arithmetic is admissible now because coverage is not disagreement and this is the
+control window, and it is recorded here with the prediction it overturns rather
+than in place of it.
+
+Coverage requires at least 3 qualifying stations in a city-window, so a city
+contributing two stations produces no covered window at all however completely
+those two serve. The distribution, not the average, is what decides D2's
+evaluability:
+
+| city | admitted | contributing | hours with 3 or more | ceiling if all 168 |
+| --- | ---: | ---: | ---: | ---: |
+| Tokyo | 119 | 0 | 0 | 0 |
+| Delhi | 42 | 15 | 162 | 168 |
+| New York | 15 | 4 | 168 | 168 |
+| Chicago | 8 | 2 | 0 | 0 |
+| Berlin | 7 | 2 | 0 | 0 |
+| Madrid | 6 | 3 | 156 | 168 |
+| Los Angeles | 6 | 0 | 0 | 0 |
+| Amsterdam | 5 | 1 | 0 | 0 |
+| **total** | **208** | **27** | **486** | **504** |
+
+**486 covered city-windows in the control week, against a precondition of 200.**
+Three cities of eight clear the minimum coverage rule; the other five contribute
+nothing. The ceiling is 504 rather than the 1176 the contract's reasoning
+supposed, so the margin is less than half what was assumed, but 200 is cleared
+about two and a half times over. If the holdout week resembles the control week,
+**D2 is likely to be evaluable**, and the earlier prediction to the contrary is
+withdrawn.
+
+Three things follow that are worth stating before the holdout is opened:
+
+* **The margin is thin in a specific place.** Madrid contributes exactly 3
+  stations, the minimum. One station absent for an hour takes that hour from
+  covered to uncovered, and one station absent for the week takes Madrid from 156
+  covered windows to zero, which alone would drop the total to 330. New York's 4
+  is the next most fragile. The 486 is not a robust number and should not be
+  quoted as though it were.
+* **Berlin was the city the contract disclosed as sitting near this boundary**,
+  with seven admitted stations and a completeness sample suggesting sensitivity.
+  The disclosure named the right city and understated the effect: Berlin
+  contributes two stations and therefore zero covered windows.
+* **The per-domain breakdown the contract requires as an output is now lopsided.**
+  Delhi and New York are CAMS global; Madrid is the only CAMS Europe city with any
+  coverage at all. A per-domain rate for Europe would rest on one city, and the
+  CPCB construction confound already recorded for Delhi now covers 162 of the 486
+  covered windows, a third of the total.
+
+None of this is a comparison. No station value has been subtracted from any model
+value, and the flag rate remains unobserved.
 
 **No apparatus fault.** The capture did what it was asked to do and recorded what
 the provider served. A thin station side is a fact about the data, not a defect in
 the instrument, and it is not grounds for a re-run.
+
+## Follow-up: the sixth contract defect, a well-formed rule on a false premise
+
+Recorded 2026-08-04, after the control capture and before any comparison.
+
+**The defect.** Section 5's admission rule admits a station when its PM2.5
+sensor's `datetimeFirst` and `datetimeLast` bracket the capture window, and states
+the purpose as ensuring the sensor "covered the whole span being measured". Those
+two fields record when a sensor first and last reported anything. They do not
+imply that `/v3/sensors/{id}/hours` serves an hourly rollup across the span
+between them, and for 181 of 208 admitted sensors it does not.
+
+**What distinguishes it from the first five.** Defects one through four were the
+document being wrong about the world: a superseded constant, an attribution slip,
+a propagation path through the wrong carrier, a description of the codebase nobody
+checked. Defect five was the document being inconsistent with itself. This one is
+neither. **The rule is well formed, was applied correctly, and rests on a premise
+that is false.** Nothing in the document contradicts anything else in it, and
+nothing in it misdescribes an external fact. It infers a property of one endpoint
+from a field served by another, and the inference does not hold.
+
+**The lesson, in the form it generalises.** The pre-flight verified that
+`/v3/sensors/{id}/hours` works, from one sensor per city, and recorded its shape
+in detail: the half-open hour, `period.label` of `1hour`, `flagInfo.hasFlags`,
+`coverage.observedCount`. Admission then admitted 208 sensors on `/v3/locations`
+metadata alone. **A capability was measured and a coverage was assumed.**
+Verifying that a field exists, and even that an endpoint works, is not verifying
+what either implies about what a different endpoint will serve for a given
+sensor over a given span. The only way to have caught this before the freeze was
+to ask the hours endpoint about the actual capture window for more than one
+sensor per city, which is a metadata-only query and would have cost nothing.
+
+**A sharper version of the same miss, found while checking this.** The record was
+searched for the completeness evidence behind the admitted population. There is
+**no Tokyo completeness sample and no Los Angeles one**. The only completeness
+evidence anywhere in the contract or this ADR is a single unnamed Berlin sensor
+returning 18 hours across a 42 hour range, cited twice: once to disclose that
+Berlin sits near the coverage boundary, and once to suggest the realised
+city-window count could be materially lower than the ceiling.
+
+So neither branch of the obvious question applies. It is not that a sampled Tokyo
+sensor is outside the admitted set, and not that the population has shifted since
+2026-08-03. **One sensor, in one city, was the entire completeness evidence for a
+population of 208 sensors across eight cities**, and that city is Berlin, which
+now contributes two stations and therefore no covered windows at all. The sample
+was also not reproducible: the sensor was never named, so it cannot be re-queried
+to distinguish a change from a misreading.
+
+**Not repaired, and the reason is the same as before.** The admission rule is
+frozen and the artifact is pinned at 2026-08-03. Re-deriving the admitted set on
+the strength of this observation would move a frozen rule, and it would move the
+measurement's own denominator. What changes is the record.
+
+**The figure to quote is 208 admitted and 27 contributing.** Every later summary
+will be tempted to describe the scale as 208 admitted stations, because that is
+the larger and more flattering number and it is the one the contract states. The
+honest pair is both, and the sentence between them is the finding: **OpenAQ's
+location metadata does not predict what its hourly endpoint serves.** That is a
+second-order version of the AFR result and a more useful one, because AFR is data
+that visibly does not exist while this is data that appears to.
 
 ## Post-project findings, recorded and not built
 
