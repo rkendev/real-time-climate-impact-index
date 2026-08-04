@@ -317,6 +317,9 @@ class Settings(BaseSettings):
     # provider does not state whether a past hour is analysis or retained
     # forecast, so this waits for a full model cycle to have completed.
     station_analysis_lag_hours: int = 48
+    # Which committed admission artifact to read, by derivation date. Empty means
+    # the newest. Whatever produces a measurement records the version it used.
+    station_admission_version: str = ""
 
     source_fetch_timeout_s: float = 10.0
 

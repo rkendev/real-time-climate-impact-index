@@ -49,9 +49,16 @@ def build_event_source(
     # swallowed station fault would be indistinguishable downstream from a region
     # having no station coverage, which is the finding this project publishes.
     from climate_index.adapters.composite_source import CompositeEventSource
-    from climate_index.adapters.openaq import OpenAQStationSource
+    from climate_index.adapters.openaq import OpenAQStationSource, admitted_sensors, load_artifact
 
-    stations = OpenAQStationSource.from_settings(settings, (), logger=logger)
+    # Read, never derived. The admitted set is an outcome of the frozen rules and
+    # a published figure rests on it, so it comes from a committed dated artifact
+    # rather than from a startup query that could move it with nothing recording
+    # that it had. Re-derivation is an explicit command.
+    artifact = load_artifact(settings.station_admission_version or None)
+    stations = OpenAQStationSource.from_settings(
+        settings, admitted_sensors(artifact), logger=logger
+    )
     return CompositeEventSource([("primary", primary), ("stations", stations)], logger=logger)
 
 

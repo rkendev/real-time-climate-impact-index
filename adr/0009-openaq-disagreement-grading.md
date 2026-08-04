@@ -405,6 +405,77 @@ pre-committed reading required for a void city in any case.
   domain and the 45 km one is three against five. That changes the per-domain
   reporting, not the rate D2 binds on.
 
+## The admission artifact, and two things the adapter work surfaced
+
+### The admitted set is pinned, not cached
+
+`docs/evidence/station-admission/2026-08-03.json` carries the sensor location ids
+per city, the rule parameters that produced them, the radius per city, the capture
+window, and the HTTP status distribution of the run. The adapter **reads** it. It
+does not re-derive on startup, on a miss, or on a schedule.
+
+The reason is the distinction that carried the Madrid correction: this set is an
+outcome of the frozen rules rather than an input to them, and a published figure
+rests on it. A set that silently refreshed could move that figure with nothing
+recording that it had, and the drift would be invisible in the same way the
+throttled probe's zeros were. Re-derivation is therefore an explicit command that
+writes a **new** dated file beside the old one, never over it, with the diff
+recorded here. `tests/unit/test_station_admission_artifact.py` pins the totals to
+208 across 8 of 12 cities, checks that every city lists exactly as many ids as it
+admits, checks that the funnel is monotonic, and checks that the producing run was
+clean. Both a hand edit and a silent refresh were seeded and both turn it red.
+
+Station and sensor identifiers are metadata rather than measured values, so the
+frozen licence rule, which restricts committing raw station readings, does not
+apply to them.
+
+### A frozen validity condition has never been observed to fire
+
+The provider quality flag `hasFlags` was false on every hour sampled, across every
+network. The fixture exercising it is therefore labelled a construction rather than
+a transcription, and the honest reading is broader than the fixture: **one of the
+frozen validity conditions has never been seen to fire against the real
+population.**
+
+The rule does not move. What follows is a reporting obligation, pre-committed here
+rather than discovered by a reader later: during the capture, the number of hours
+across the admitted set carrying `hasFlags` true is counted and reported. If it is
+zero, the finding is that the provider flag never fires for these networks over
+this window, the filter removed nothing, and D2's denominator is unaffected by it.
+That is the same discipline as asserting a witness set is non-empty, applied to a
+frozen filter instead of to a test: a filter that has never been observed to
+exclude anything may be inert, and saying so is worth more than assuming it is
+doing work.
+
+### observedCount is cross-checked, because its own block is wrong elsewhere
+
+The coverage block on the EEA sensor reports `expectedInterval` of `24:00:00` for a
+one-hour period and `percentCoverage` of `2400.0`. Both are nonsense, and the
+adapter takes `observedCount` from that same block.
+
+Two second routes were established against live responses rather than assumed:
+
+- **Arithmetic within the block.** `percentComplete * expectedCount / 100`
+  reproduced `observedCount` exactly on the fifteen-minute network across the
+  hours sampled, at 4 of 4 for 100.0, 3 of 4 for 75.0 and 2 of 4 for 50.0, and on
+  the provider-hourly network at 1 of 1 for 100.0.
+- **The summary block**, which is a different block and therefore the more
+  independent of the two: a single underlying sample cannot span a range, so
+  `observedCount` of 1 with `min` below `max` is a contradiction.
+
+Where the routes disagree the adapter **reports and drops the hour** under its own
+reason code rather than preferring either number. The limit is stated rather than
+papered over: the first route shares a block with the field it checks, so a
+corrupted count would escape it if `percentComplete` were corrupted consistently.
+
+That same probing also localised the defect: `expectedInterval` reads `01:00:00`
+correctly on the fifteen-minute network, so the nonsense is a property of that one
+sensor's coverage block rather than of the endpoint.
+
+The cross-check earned its place immediately by failing a fixture of mine that had
+`observedCount` of 4 while inheriting `expectedCount` of 1. An invented fixture was
+internally impossible; the transcribed replacement is not.
+
 ## Post-project findings, recorded and not built
 
 Things worth fixing that this project will not fix. Section 2 of the contract
@@ -460,6 +531,17 @@ session that found them.
 
    A lint rule banning a bare `Settings(` and `get_settings()` under `tests/`
    closes the class.
+7. **Two mypy configurations disagree, and only one of them runs in CI's gate.**
+   `make type-check` runs mypy in the project virtual environment, where `httpx`
+   ships type information. The pre-commit hook runs it in an isolated environment
+   carrying only pydantic, where `httpx` is untyped. A `ModuleType` annotation on
+   the lazy import passed the first and failed the second with a
+   `no-any-return`. The resolution taken is to match the Open-Meteo adapter's
+   `Any` annotation rather than to widen the hook's dependencies, since the hook's
+   isolation is the property that makes it cheap. Recorded because it is the same
+   family as finding 6: a check whose result depends on which environment ran it,
+   where the two can disagree silently until one of them happens to be the one
+   that fails.
 
 ## Alternatives considered
 

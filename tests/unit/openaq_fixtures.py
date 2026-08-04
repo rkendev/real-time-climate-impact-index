@@ -113,14 +113,40 @@ HOUR_PROVIDER_HOURLY: dict[str, Any] = {
     },
 }
 
-# OBSERVED shape, from the CPCB (Delhi) network, where observedCount ran 2, 3 and
-# 4 across the sampled hours because that provider supplies fifteen minute raw
-# data which the rollup means into an hour. The distinction the frozen rules
-# record as a per-station attribute and never gate on.
+# OBSERVED in full: sensor 12234702 (CPCB, Delhi), hour beginning
+# 2026-08-01T02:00Z. That network supplies fifteen minute raw data which the
+# rollup means into an hour, so observedCount runs to four. Two things this
+# response settles that the other one could not. Its expectedInterval reads
+# 01:00:00, correctly, which localises the 24:00:00 nonsense in the EEA
+# response to that sensor rather than to the endpoint. And percentComplete
+# times expectedCount reproduces observedCount exactly here and across the
+# eight hours sampled (4/4 at 100.0, 3/4 at 75.0, 2/4 at 50.0), which is the
+# second route the adapter cross-checks against.
+#
+# An earlier version of this fixture set observedCount to four while inheriting
+# expectedCount one from the response above. The cross-check caught it, which is
+# the argument for the cross-check in miniature: an invented fixture was
+# internally impossible and a transcribed one is not.
 HOUR_COMPUTED_MEAN: dict[str, Any] = {
     **HOUR_PROVIDER_HOURLY,
-    "value": 61.5,
-    "coverage": {**HOUR_PROVIDER_HOURLY["coverage"], "observedCount": 4},
+    "value": 19.9,
+    "summary": {
+        "min": 15.4,
+        "q02": 15.4,
+        "q25": 18.0,
+        "median": 20.4,
+        "q75": 21.8,
+        "max": 23.4,
+        "avg": 19.9,
+        "sd": 1.2020815280171329,
+    },
+    "coverage": {
+        **HOUR_PROVIDER_HOURLY["coverage"],
+        "expectedCount": 4,
+        "expectedInterval": "01:00:00",
+        "observedCount": 4,
+        "percentComplete": 100.0,
+    },
 }
 
 # DERIVED from HOUR_PROVIDER_HOURLY: hasFlags flipped true. The field was

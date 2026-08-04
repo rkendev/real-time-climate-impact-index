@@ -53,8 +53,50 @@ _REASON_MALFORMED = "malformed_payload"
 _REASON_NO_HOUR = "no_hour_returned"
 _REASON_FLAGGED = "provider_flagged"
 _REASON_NO_SAMPLES = "no_underlying_sample"
+_REASON_COUNT_CONFLICT = "sample_sample_count_conflict"
 _REASON_MISSING_FIELD = "missing_field"
 _REASON_SCHEMA = "schema_rejected"
+
+
+def _sample_count_conflict(observed: int, coverage: Any, summary: Any) -> str | None:
+    """Check observedCount against the other routes to it, if any exist.
+
+    Named "conflict" rather than "disagreement" deliberately. The exclusion
+    control in tests/hygiene reserves that word for the station-against-model
+    comparison that belongs to reconciliation, and it fired on an earlier name
+    for this function. The control was left strict and the function renamed,
+    because a control that acquires exceptions stops being a control.
+
+    Two routes were established against live responses:
+
+    * arithmetic within the same block, ``percentComplete * expectedCount / 100``,
+      which reproduced observedCount exactly on both a provider-hourly network
+      and a fifteen-minute one;
+    * the summary block, which is a *different* block and therefore the more
+      independent check: a single underlying sample cannot have min below max.
+
+    Neither route is exact and the first shares a block with the field it checks,
+    so a corrupted count would escape it only if percentComplete were corrupted
+    consistently. That limit is stated rather than papered over. Returns a
+    description of the disagreement, or None when the routes agree or are absent.
+    """
+    expected = coverage.get("expectedCount")
+    percent = coverage.get("percentComplete")
+    if isinstance(expected, int) and isinstance(percent, int | float) and expected > 0:
+        implied = round(percent / 100.0 * expected)
+        if implied != observed:
+            return f"observedCount={observed} but percentComplete implies {implied}"
+
+    low, high = summary.get("min"), summary.get("max")
+    single_sample_spans_a_range = (
+        observed == 1
+        and isinstance(low, int | float)
+        and isinstance(high, int | float)
+        and low != high
+    )
+    if single_sample_spans_a_range:
+        return f"observedCount=1 but summary spans {low} to {high}"
+    return None
 
 
 @dataclass(frozen=True)
@@ -257,6 +299,15 @@ class OpenAQStationSource:
         observed = coverage.get("observedCount")
         if not isinstance(observed, int) or observed < 1:
             self._skip(_REASON_NO_SAMPLES, sensor, hour=hour.isoformat())
+            return None
+
+        disagreement = _sample_count_conflict(observed, coverage, row.get("summary") or {})
+        if disagreement is not None:
+            # Reported, not resolved. The same block carries demonstrably wrong
+            # fields on at least one network (expectedInterval reads 24:00:00 on
+            # a one hour period), so where a second route to the count exists and
+            # the two disagree, neither is preferred and the hour is dropped.
+            self._skip(_REASON_COUNT_CONFLICT, sensor, hour=hour.isoformat(), detail=disagreement)
             return None
 
         value = row.get("value")

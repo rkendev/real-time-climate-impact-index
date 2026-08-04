@@ -258,3 +258,57 @@ def test_every_source_raising_yields_an_empty_tick_rather_than_an_exception() ->
     composite = CompositeEventSource([("a", _Raising()), ("b", _Raising())], logger=_Recorder())
     assert composite.fetch_tick() == []
     assert composite.source_failure_counts == {"a": 1, "b": 1}
+
+
+def test_the_sample_count_is_cross_checked_against_percent_complete() -> None:
+    """The coverage block carries a demonstrably wrong field on one network.
+
+    expectedInterval reads 24:00:00 on a one hour period for the EEA sensor, so
+    observedCount is not taken on trust where a second route exists. Two routes
+    were established live: percentComplete times expectedCount, which reproduced
+    the count exactly on both a provider-hourly and a fifteen-minute network, and
+    the summary block, which is a different block and cannot span a range on a
+    single sample.
+    """
+    inconsistent = {
+        **HOUR_COMPUTED_MEAN,
+        "coverage": {
+            **HOUR_COMPUTED_MEAN["coverage"],
+            "observedCount": 4,
+            "expectedCount": 4,
+            "percentComplete": 50.0,
+        },
+    }
+    source, log = _source(_serving(hours_page(inconsistent)))
+    assert source.fetch_tick() == []
+    assert log.reasons() == ["sample_sample_count_conflict"]
+
+
+def test_a_single_sample_spanning_a_range_is_a_disagreement() -> None:
+    """The independent route: summary is a different block from coverage."""
+    impossible = {
+        **HOUR_PROVIDER_HOURLY,
+        "summary": {**HOUR_PROVIDER_HOURLY["summary"], "min": 1.0, "max": 9.0},
+    }
+    source, log = _source(_serving(hours_page(impossible)))
+    assert source.fetch_tick() == []
+    assert log.reasons() == ["sample_sample_count_conflict"]
+
+
+def test_a_consistent_multi_sample_hour_passes_the_cross_check() -> None:
+    """OBSERVED arithmetic: 3 of 4 reported as 75.0 percent, min below max."""
+    real = {
+        **HOUR_COMPUTED_MEAN,
+        "value": 14.9,
+        "coverage": {
+            **HOUR_COMPUTED_MEAN["coverage"],
+            "observedCount": 3,
+            "expectedCount": 4,
+            "percentComplete": 75.0,
+        },
+        "summary": {**HOUR_COMPUTED_MEAN["summary"], "min": 10.2, "max": 18.1},
+    }
+    source, _ = _source(_serving(hours_page(real)))
+    observation = source.fetch_tick()[0]
+    assert observation.sample_count == 3
+    assert observation.construction is Construction.COMPUTED_MEAN

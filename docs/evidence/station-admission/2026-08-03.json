@@ -1,0 +1,458 @@
+{
+  "schema": "station-admission/1",
+  "derived_at": "2026-08-03T14:00:00Z",
+  "derived_by": "scripts/recompute_station_admission.py at commit 6199998",
+  "note": "A committed, dated artifact and not a live cache. The adapter reads it and never re-derives, because this set is an outcome of the frozen rules rather than an input to them, and a set that silently refreshes could move a published figure with nothing recording that it had. Re-derivation writes a new dated file and its diff goes in adr/0009. Station and sensor identifiers are metadata rather than measured values, so the frozen licence rule does not bite on committing them.",
+  "rule_parameters": {
+    "source_of_truth": "PREREGISTRATION.md at commit b81f1c9",
+    "centre": "the grid point the model provider returns, not the configured city coordinate",
+    "radius_rule": "min(half-diagonal of the serving model cell, 25000 m)",
+    "reference_grade": "isMonitor true",
+    "fixed": "isMobile false",
+    "parameter": "pm25",
+    "admission": "the PM2.5 sensor's datetimeFirst and datetimeLast bracket the capture window",
+    "capture_window_start": "2026-07-17T00:00:00Z",
+    "capture_window_end": "2026-07-31T00:00:00Z"
+  },
+  "run": {
+    "station_calls": 300,
+    "station_call_statuses": {
+      "200": 300
+    },
+    "domain_probes": 20,
+    "domain_probe_statuses": {
+      "200": 12,
+      "400": 8
+    },
+    "rate_limited": false,
+    "void_cities": [],
+    "pace_seconds_between_calls": 1.1
+  },
+  "cities": {
+    "Amsterdam": {
+      "region": "EUR",
+      "domain": "cams_europe",
+      "radius_m": 6500,
+      "radius_capped": false,
+      "funnel": {
+        "in_radius": 14,
+        "fixed": 14,
+        "reference_grade": 10,
+        "with_pm25_sensor": 5,
+        "admitted": 5
+      },
+      "http_status_counts": {
+        "200": 6
+      },
+      "sensor_location_ids": [
+        80,
+        95,
+        98,
+        102,
+        2383
+      ]
+    },
+    "Berlin": {
+      "region": "EUR",
+      "domain": "cams_europe",
+      "radius_m": 6500,
+      "radius_capped": false,
+      "funnel": {
+        "in_radius": 17,
+        "fixed": 17,
+        "reference_grade": 11,
+        "with_pm25_sensor": 9,
+        "admitted": 7
+      },
+      "http_status_counts": {
+        "200": 10
+      },
+      "sensor_location_ids": [
+        2993,
+        3019,
+        4761,
+        4767,
+        2162178,
+        2162180,
+        2162181
+      ]
+    },
+    "Madrid": {
+      "region": "EUR",
+      "domain": "cams_europe",
+      "radius_m": 7000,
+      "radius_capped": false,
+      "funnel": {
+        "in_radius": 21,
+        "fixed": 21,
+        "reference_grade": 15,
+        "with_pm25_sensor": 6,
+        "admitted": 6
+      },
+      "http_status_counts": {
+        "200": 7
+      },
+      "sensor_location_ids": [
+        4274,
+        4275,
+        4285,
+        4323,
+        4328,
+        4331
+      ]
+    },
+    "New York": {
+      "region": "NAM",
+      "domain": "cams_global",
+      "radius_m": 25000,
+      "radius_capped": true,
+      "funnel": {
+        "in_radius": 71,
+        "fixed": 71,
+        "reference_grade": 26,
+        "with_pm25_sensor": 19,
+        "admitted": 15
+      },
+      "http_status_counts": {
+        "200": 20
+      },
+      "sensor_location_ids": [
+        384,
+        625,
+        626,
+        628,
+        631,
+        648,
+        664,
+        665,
+        857,
+        928,
+        971,
+        8749,
+        387315,
+        496096,
+        6434257
+      ]
+    },
+    "Chicago": {
+      "region": "NAM",
+      "domain": "cams_global",
+      "radius_m": 25000,
+      "radius_capped": true,
+      "funnel": {
+        "in_radius": 311,
+        "fixed": 311,
+        "reference_grade": 14,
+        "with_pm25_sensor": 10,
+        "admitted": 8
+      },
+      "http_status_counts": {
+        "200": 11
+      },
+      "sensor_location_ids": [
+        424,
+        1657,
+        1856,
+        2085,
+        2047319,
+        3301366,
+        3368525,
+        4139029
+      ]
+    },
+    "Los Angeles": {
+      "region": "NAM",
+      "domain": "cams_global",
+      "radius_m": 25000,
+      "radius_capped": true,
+      "funnel": {
+        "in_radius": 248,
+        "fixed": 248,
+        "reference_grade": 18,
+        "with_pm25_sensor": 12,
+        "admitted": 6
+      },
+      "http_status_counts": {
+        "200": 13
+      },
+      "sensor_location_ids": [
+        1948,
+        7936,
+        8236,
+        6136584,
+        6410794,
+        6415449
+      ]
+    },
+    "Lagos": {
+      "region": "AFR",
+      "domain": "cams_global",
+      "radius_m": 25000,
+      "radius_capped": true,
+      "funnel": {
+        "in_radius": 61,
+        "fixed": 61,
+        "reference_grade": 1,
+        "with_pm25_sensor": 1,
+        "admitted": 0
+      },
+      "http_status_counts": {
+        "200": 2
+      },
+      "sensor_location_ids": []
+    },
+    "Nairobi": {
+      "region": "AFR",
+      "domain": "cams_global",
+      "radius_m": 25000,
+      "radius_capped": true,
+      "funnel": {
+        "in_radius": 16,
+        "fixed": 16,
+        "reference_grade": 9,
+        "with_pm25_sensor": 9,
+        "admitted": 0
+      },
+      "http_status_counts": {
+        "200": 10
+      },
+      "sensor_location_ids": []
+    },
+    "Cairo": {
+      "region": "AFR",
+      "domain": "cams_europe",
+      "radius_m": 7400,
+      "radius_capped": false,
+      "funnel": {
+        "in_radius": 1,
+        "fixed": 1,
+        "reference_grade": 1,
+        "with_pm25_sensor": 1,
+        "admitted": 0
+      },
+      "http_status_counts": {
+        "200": 2
+      },
+      "sensor_location_ids": []
+    },
+    "Tokyo": {
+      "region": "ASI",
+      "domain": "cams_global",
+      "radius_m": 25000,
+      "radius_capped": true,
+      "funnel": {
+        "in_radius": 148,
+        "fixed": 148,
+        "reference_grade": 145,
+        "with_pm25_sensor": 128,
+        "admitted": 119
+      },
+      "http_status_counts": {
+        "200": 129
+      },
+      "sensor_location_ids": [
+        1214487,
+        1214508,
+        1214509,
+        1214510,
+        1214511,
+        1214514,
+        1214515,
+        1214656,
+        1214712,
+        1214721,
+        1214722,
+        1214767,
+        1214815,
+        1214816,
+        1214830,
+        1214832,
+        1214833,
+        1214854,
+        1214884,
+        1214929,
+        1214930,
+        1214931,
+        1215051,
+        1215052,
+        1215069,
+        1215142,
+        1215145,
+        1215146,
+        1215147,
+        1215148,
+        1215149,
+        1215150,
+        1215151,
+        1215154,
+        1215155,
+        1215156,
+        1215157,
+        1215158,
+        1215160,
+        1215161,
+        1215162,
+        1215163,
+        1215192,
+        1215195,
+        1215197,
+        1215198,
+        1215200,
+        1215202,
+        1215212,
+        1215217,
+        1215248,
+        1215275,
+        1215276,
+        1215279,
+        1215280,
+        1215290,
+        1215291,
+        1215294,
+        1215295,
+        1215329,
+        1215373,
+        1215375,
+        1215383,
+        1215400,
+        1215403,
+        1215412,
+        1215413,
+        1215449,
+        1215460,
+        1215462,
+        1215463,
+        1215465,
+        1215474,
+        1215475,
+        1215486,
+        1215487,
+        1215488,
+        1215489,
+        1215490,
+        1215491,
+        1215526,
+        1215527,
+        1215536,
+        1215541,
+        1215542,
+        1215543,
+        1215544,
+        1215565,
+        1215592,
+        1215604,
+        1215605,
+        1215606,
+        1215737,
+        1215738,
+        1215739,
+        1215758,
+        1215779,
+        1215784,
+        1215787,
+        1215788,
+        1215789,
+        1215832,
+        1215833,
+        1215834,
+        1215839,
+        1215848,
+        1215874,
+        1215878,
+        1215879,
+        1215880,
+        1298213,
+        2071235,
+        2698067,
+        2894935,
+        2978379,
+        3325089,
+        5203406,
+        5328305,
+        6143563
+      ]
+    },
+    "Delhi": {
+      "region": "ASI",
+      "domain": "cams_global",
+      "radius_m": 25000,
+      "radius_capped": true,
+      "funnel": {
+        "in_radius": 98,
+        "fixed": 98,
+        "reference_grade": 83,
+        "with_pm25_sensor": 81,
+        "admitted": 42
+      },
+      "http_status_counts": {
+        "200": 82
+      },
+      "sensor_location_ids": [
+        17,
+        50,
+        235,
+        301,
+        5404,
+        5570,
+        5586,
+        5598,
+        5610,
+        5616,
+        5626,
+        5627,
+        5630,
+        5634,
+        5650,
+        6356,
+        6358,
+        6359,
+        6924,
+        6929,
+        6931,
+        6932,
+        6934,
+        6938,
+        6957,
+        6960,
+        6980,
+        6988,
+        8118,
+        8235,
+        8365,
+        8472,
+        8475,
+        8917,
+        10484,
+        10486,
+        10820,
+        10825,
+        10831,
+        10900,
+        10921,
+        11603
+      ]
+    },
+    "Jakarta": {
+      "region": "ASI",
+      "domain": "cams_global",
+      "radius_m": 25000,
+      "radius_capped": true,
+      "funnel": {
+        "in_radius": 27,
+        "fixed": 27,
+        "reference_grade": 7,
+        "with_pm25_sensor": 7,
+        "admitted": 0
+      },
+      "http_status_counts": {
+        "200": 8
+      },
+      "sensor_location_ids": []
+    }
+  },
+  "totals": {
+    "admitted_stations": 208,
+    "admitted_cities": 8,
+    "cities_queried": 12
+  }
+}
