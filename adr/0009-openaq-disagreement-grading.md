@@ -695,6 +695,56 @@ than 192. A region configured with no city is now refused at construction by bot
 sources, because an empty city list would have produced weather-only windows that
 read as thinned coverage rather than as a misconfiguration.
 
+## T3a: simulated index values moved, and the correction record
+
+Recorded 2026-08-04, correcting a claim made in the commit message of `be6d1a0`.
+
+That commit said no grade moves when the simulated source went from one satellite
+event per region to one per city. That is true and it is narrower than a reader
+will take it for. **Simulated `pollution_index` values do move, and by a
+substantial amount.** The claim "no grade moves" was established; the claim "no
+value moves" was not, and it is false.
+
+**Measured, over 2000 seeded window computations of each shape.**
+
+| | mean | sd | min | max |
+| --- | --- | --- | --- | --- |
+| `pollution_index`, one event per region | 0.6504 | 0.2040 | 0.0246 | 0.9992 |
+| `pollution_index`, one event per city | 0.7143 | 0.1141 | 0.2121 | 0.9635 |
+| `impact_index`, one event per region | 40.70 | 18.84 | | |
+| `impact_index`, one event per city | 42.70 | 17.89 | | |
+
+At the same seed the two agreed on `pollution_index` in 0 of 2000 windows. The
+per-seed absolute difference averaged 0.143 with a maximum of 0.738 on a zero to
+one scale, and 5.3 with a maximum of 22.6 on the zero to one hundred index. The
+confidence grade was MEASURED under both, which is all the earlier claim covered.
+
+**The mean moved, not only the variance, and the mechanism is the clamp.**
+Averaging more samples would ordinarily leave the expectation alone and shrink
+the spread. `pollution_index` clamps the aerosol term at the saturation constant
+before averaging it with cloud cover, and a clamp is not linear. The generator
+samples aerosol uniformly over zero to five against a saturation of two, so a
+single draw saturates 59.9 percent of the time while a mean of three draws
+concentrates near 2.5 and saturates 71.7 percent of the time. The mean aerosol
+sub-term rises from 0.799 to 0.928, and that is where the shift comes from.
+
+**Which shape was wrong.** E-7 has the real source sampling one reading per city,
+and the real adapter has always emitted one satellite event per city per tick, so
+a real-source window has always held three per region. The mean over the window
+was therefore already a mean of three there. The simulated source was the one
+that disagreed with E-7, and aligning it is a fidelity improvement rather than a
+defect introduced. Nothing on the real path moved, because nothing on the real
+path changed.
+
+The consequence is confined to the simulated feed and the demo backfill that runs
+on it, which the dashboard already declares as generated rather than collected.
+No shipped real-source row is affected and none was recomputed.
+
+**Recorded because the suite was green.** No test pinned a simulated
+`pollution_index` value, so the whole shift passed unremarked. A green suite
+established that nothing asserted these numbers, not that they were unchanged,
+and those are different findings.
+
 ## T3a: the exclusion period ended, and what replaced the control
 
 Recorded 2026-08-04. This is the dated record the negative-space control was
@@ -798,6 +848,55 @@ written before the fields existed carry neither, and each store maps their absen
 onto the two documented states once, at its read boundary, where the mapping is
 visible. Requiring them also caught two call sites the suite did not: the AT-5 and
 NFR-P3 verify scripts both construct records, and mypy named them immediately.
+
+## T3a: AT-13, and the fixture that had to be able to fail
+
+Recorded 2026-08-04. AT-13 closes over recorded fixtures, before the control run
+and deliberately so: three control faults end the project, and a fault this test
+would have caught spends a scarce budget on a known-avoidable failure.
+
+**The weak claim, named.** "Every closed region-window carries a disagreement
+state and a provenance tier" is satisfied completely by a fixture in which every
+window is NOT_COMPARED and UNCHECKED. That is the T2 lesson in a new place: the
+station-boundary guard once passed over a fixture whose only window already
+graded MEASURED, and a grade that cannot move cannot be seen to move. A guard
+over a state machine needs a fixture that reaches more than one state.
+
+So the fixture reaches three, and a companion test asserts that it does. EUR is
+covered and agreeing, ASI is covered and disagreeing well past the tolerance, AFR
+has no qualifying station at all. NAM is present with coverage one short of the
+frozen minimum, because having stations and still not being covered is a
+different case from having none, and a fixture holding only the AFR case would
+let a rule that ignored the minimum pass.
+
+**Proven by making the fixture inert and watching what survived.** With every
+station row removed, so that every window is NOT_COMPARED and UNCHECKED, six of
+the nine tests went red and **three still passed**:
+
+* `test_every_closed_region_window_carries_both_states`, which is the weak claim
+  itself;
+* `test_an_uncovered_window_carries_the_unchecked_tier`, because everything was
+  uncovered;
+* `test_pollution_index_is_byte_identical_with_reconciliation_not_called`,
+  because nothing had been reconciled for the index to be invariant to.
+
+Those three are exactly the shape of an AT-13 that establishes the apparatus ran
+rather than that it discriminated. The companion is what closes the gap, and the
+invariance claim is now paired with its own non-vacuity test asserting that
+reconciliation changed something before its not changing the index means
+anything.
+
+**The index comparison is on `repr`, not `==`.** "Byte-identical" is the word the
+plan used and a float differing below printing precision would satisfy equality.
+
+**The fixture licence surface grew, so the licence control grew with it.**
+`tests/hygiene/test_fixture_provenance.py` scanned one fixture module by a
+hardcoded tuple, so a second fixture module would have been a hole in exactly the
+way the untracked-file hole was. The AT-13 fixture is entirely synthetic and says
+so in its own docstring, and it is listed in the scan anyway, because "we know it
+is clean" is the claim that control exists to replace. The key-shaped and header
+scans also gained an anti-vacuity check, since a clean tree and a broken regex
+had until now looked the same.
 
 ## Post-project findings, recorded and not built
 

@@ -22,7 +22,17 @@ from pathlib import Path
 
 from tests.unit import openaq_fixtures
 
-FIXTURE_FILES = (Path(__file__).resolve().parents[1] / "unit" / "openaq_fixtures.py",)
+_TESTS = Path(__file__).resolve().parents[1]
+# Every committed fixture module carrying station-shaped or model-shaped numbers.
+# A new fixture file is a new place a licensed measurement could be committed, so
+# it is added here when it is written rather than left outside the scan. The
+# AT-13 fixture is entirely synthetic and says so in its own docstring; it is
+# listed anyway, because "we know it is clean" is the claim this control exists
+# to replace.
+FIXTURE_FILES = (
+    _TESTS / "unit" / "openaq_fixtures.py",
+    _TESTS / "integration" / "at13_fixtures.py",
+)
 
 # Licences whose redistributionAllowed flag has been checked on /v3/licenses.
 # Adding one means checking that flag first, not assuming it.
@@ -86,9 +96,27 @@ def test_every_declared_source_is_on_the_permitted_licence_list() -> None:
             assert source.get("synthetic") is True, f"{name} claims SYNTHETIC without saying so"
 
 
+def test_the_at13_fixture_declares_itself_synthetic() -> None:
+    """It commits no licensed measurement, and it has to say so where it lives.
+
+    The licence rule bites on committed raw values, not on use, so a fixture of
+    invented numbers is outside it. That is only true while the numbers really
+    are invented, which is a claim the module makes in writing rather than one a
+    reader has to infer from the values looking round.
+    """
+    from tests.integration import at13_fixtures
+
+    assert "SYNTHETIC" in at13_fixtures.VALUE_PROVENANCE
+    assert "Every value here is synthetic" in (at13_fixtures.__doc__ or "")
+
+
 def test_the_scan_reaches_the_fixtures_it_claims_to() -> None:
     """Neither absence test may pass vacuously."""
     for path in FIXTURE_FILES:
         assert path.is_file(), path
     assert _measured_value_fixtures(), "no fixture carrying a measured value was found"
+    # The key-shaped scan must be able to fire, or a clean tree and a broken
+    # regex look the same.
+    assert KEY_SHAPED.search("k" * 32)
+    assert HEADER_WITH_VALUE.search(f'"{HEADER_NAME}": "x"')
     assert ast.parse(FIXTURE_FILES[0].read_text()).body
