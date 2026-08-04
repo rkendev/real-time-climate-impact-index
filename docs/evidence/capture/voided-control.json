@@ -1,0 +1,18 @@
+[
+  {
+    "model": {
+      "calls": 0,
+      "rate_limited": false,
+      "statuses": {}
+    },
+    "reason": "https://api.openaq.org/v3/v3/sensors/80/hours returned 404",
+    "station": {
+      "calls": 1,
+      "rate_limited": false,
+      "statuses": {
+        "404": 1
+      }
+    },
+    "voided_at": "2026-08-04T14:13:59Z"
+  }
+]

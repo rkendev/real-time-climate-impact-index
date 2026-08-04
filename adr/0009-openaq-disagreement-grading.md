@@ -1058,6 +1058,115 @@ description of that system. This one says a pre-registration must also be read
 against itself, because internal contradiction needs no external source to detect
 and no amount of external verification will surface it.
 
+## Capture attempt 1, voided: diagnosis
+
+Written 2026-08-04T14:14Z, **before any repair was attempted**, per the contract's
+rule that every apparatus fault is diagnosed in writing first.
+
+**What happened.** The first station call of the first capture attempt returned
+404 and the attempt was voided. Recorded in
+`docs/evidence/capture/voided-control.json`: one station call, status 404, zero
+model calls, nothing kept on disk.
+
+**The fault.** The requested URL was
+`https://api.openaq.org/v3/v3/sensors/80/hours`. The path segment `/v3` appears
+twice. `CII_OPENAQ_BASE_URL` is `https://api.openaq.org/v3`, and
+`scripts/capture_window.py` held its endpoint constant as
+`/v3/sensors/{sensor_id}/hours`, so joining them duplicated the version segment.
+The shipped adapter has always had this right, at
+`src/climate_index/adapters/openaq/source.py:240`, which builds
+`f"{self._base_url}/sensors/{sensor.sensor_id}/hours"` against the same setting.
+The capture script restated the path instead of matching the one working example
+in the repository.
+
+**Repair.** Drop the `/v3` from the capture script's endpoint constant so it joins
+the base the same way the adapter does.
+
+**Why no test caught it.** The capture script's tests covered what the parsing
+does with a payload, what the artifact records, what the void history does. Not
+one of them constructed a URL. The whole module was tested from the response
+inwards, and the one thing that decides whether a response arrives at all was
+outside the tests. A test asserting the built URL is added with the repair.
+
+**Whether this counts against the contract's re-run cap.** The contract permits
+the control window to be re-run after a diagnosed apparatus repair at most twice,
+and a third fault ships the project as "the measurement could not be completed".
+My reading is that **this does not count against that cap**, and the reasoning is
+stated so it can be overruled rather than assumed:
+
+* the cap governs the control-window *run*, which is the reconciliation over
+  captured data. This failure was in data acquisition, before it;
+* no station value was retrieved, no model value was fetched, no comparison was
+  computed, and no rate of any kind was observed. Nothing about the control
+  window was seen;
+* the cap exists to stop a measurement being re-run until it gives an agreeable
+  answer. A 404 on the first call, from a doubled path segment, cannot have been
+  influenced by and cannot have influenced any result.
+
+The conservative reading is that any fault in the apparatus counts, in which case
+one of two permitted re-runs is now spent. That reading is recorded here beside
+mine so a later reader is choosing between two stated positions rather than
+discovering only the convenient one. Under either reading the holdout still opens
+exactly once.
+
+## Capture attempt 2, succeeded, and what it showed about admission
+
+Recorded 2026-08-04. The capture is `docs/evidence/capture/2026-08-04-control.json`.
+No comparison has been computed over it; that is commit 7.
+
+**The run.** 208 station calls, all 200. 12 model calls, all 200. No 429 and no
+rate limiting: the provider reported 59 of 60 remaining at the first response and
+53 at the last. Realized bounds `2026-07-17T00:00:00Z` to `2026-07-23T23:00:00Z`
+on both sources, which is strictly inside the control window and strictly before
+the holdout. The voided first attempt is carried in the artifact's history.
+
+**The finding, and it is a large one. Of 208 admitted sensors, 27 returned data.**
+The model side is complete: 12 cities times 168 hours is 2016 rows, all present.
+The station side is 4031 rows from 27 distinct stations, and two of the eight
+admitted cities returned nothing at all: Tokyo, which holds 119 of the 208
+admitted sensors, and Los Angeles.
+
+**Diagnosed rather than assumed.** Every call returned 200, so this is not a
+transport failure. Sensors were probed over the control window and over a window
+strictly after the sealed holdout, and the pattern is unambiguous: a sensor either
+serves data in **both** windows or in **neither**. Tokyo 1214487 and 1214508, Los
+Angeles 1948 and 7936, Amsterdam 80 and Delhi 17 all return `found=0` in both.
+Amsterdam 95 and Delhi 50 return data in both. Nothing about the control window is
+special, and nothing about the capture failed.
+
+**What is actually wrong is a premise of the frozen admission rule.** A station is
+admitted when its PM2.5 sensor's `datetimeFirst` and `datetimeLast` bracket the
+capture window, and the contract states the purpose of that rule as ensuring the
+sensor "covered the whole span being measured". It does not ensure that. Those two
+fields are location-level metadata about when a sensor first and last reported
+anything; they evidently do not imply that `/v3/sensors/{id}/hours` serves an
+hourly rollup for the span between them. The rule was applied correctly and its
+premise is false.
+
+**This is recorded, not repaired.** The admission rule is frozen, the artifact is
+pinned at version 2026-08-03, and the obvious move now visible, loosening
+admission or re-deriving the admitted set so that more sensors carry data, is
+exactly an observation moving a frozen rule. It is the same move the licence
+correction had to be defended against, and it would be worse here because the
+observation is of the measurement's own denominator. The rule does not move. What
+moves is the record.
+
+**The consequence is stated in advance of measuring it.** The contract's
+evaluability precondition requires the holdout to contain at least 200 covered
+city-windows, and its ceiling reasoning assumed seven admitted cities times 168
+hours. Coverage also requires at least 3 qualifying stations in a city-window. With
+27 contributing sensors across 6 cities rather than 208 across 8, the covered
+city-window count will be far below what the contract's ceiling reasoning
+supposed. Whether it clears 200 is not computed here and is not guessed at; the
+contract already says that below 200 D2 is NOT EVALUABLE and ships as such rather
+than as a pass or a fail, and that provision now looks considerably more likely to
+fire than it did when it was written. Stating that before the number exists is the
+point.
+
+**No apparatus fault.** The capture did what it was asked to do and recorded what
+the provider served. A thin station side is a fact about the data, not a defect in
+the instrument, and it is not grounds for a re-run.
+
 ## Post-project findings, recorded and not built
 
 Things worth fixing that this project will not fix. Section 2 of the contract

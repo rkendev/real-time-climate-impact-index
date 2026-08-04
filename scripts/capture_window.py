@@ -71,7 +71,12 @@ PACE_SECONDS = 1.1
 # silent truncation would look exactly like a sparse sensor.
 PAGE_LIMIT = 1000
 
-OPENAQ_HOURS_PATH = "/v3/sensors/{sensor_id}/hours"
+# Joined onto CII_OPENAQ_BASE_URL, which already carries the version segment.
+# No /v3 here: the first capture attempt was voided by a 404 on
+# https://api.openaq.org/v3/v3/sensors/80/hours because this constant restated it.
+# The shipped adapter builds the same URL at source.py:240 and has always been
+# right; the fix is to match it rather than to restate the path a second time.
+OPENAQ_HOURS_PATH = "/sensors/{sensor_id}/hours"
 OPEN_METEO_AIR_QUALITY = "https://air-quality-api.open-meteo.com/v1/air-quality"
 
 
@@ -268,6 +273,26 @@ def station_rows(
     return rows
 
 
+def station_url(base_url: str, sensor_id: int, start: datetime, end: datetime, page: int) -> str:
+    """The station request URL, extracted so it can be asserted without a network.
+
+    Pulled out of the fetch loop by the repair for attempt 1. The whole module was
+    tested from the response inwards, so the one thing deciding whether a response
+    arrives at all had no test at all, and a doubled version segment survived to
+    the first live call.
+    """
+    query = urllib.parse.urlencode(
+        {
+            "datetime_from": _iso(start),
+            "datetime_to": _iso(end),
+            "limit": PAGE_LIMIT,
+            "page": page,
+        }
+    )
+    path = OPENAQ_HOURS_PATH.format(sensor_id=sensor_id)
+    return f"{base_url.rstrip('/')}{path}?{query}"
+
+
 def fetch_station_side(
     client: PacedClient,
     base_url: str,
@@ -280,16 +305,7 @@ def fetch_station_side(
     for sensor in sensors:
         page = 1
         while True:
-            query = urllib.parse.urlencode(
-                {
-                    "datetime_from": _iso(start),
-                    "datetime_to": _iso(end),
-                    "limit": PAGE_LIMIT,
-                    "page": page,
-                }
-            )
-            path = OPENAQ_HOURS_PATH.format(sensor_id=sensor["sensor_id"])
-            payload = client.get(f"{base_url.rstrip('/')}{path}?{query}")
+            payload = client.get(station_url(base_url, int(sensor["sensor_id"]), start, end, page))
             batch = station_rows(payload, sensor)
             rows += batch
             found = payload.get("meta", {}).get("found")

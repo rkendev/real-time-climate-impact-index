@@ -208,14 +208,68 @@ def check_capture_artifact(record: dict[str, object], name: str) -> None:
         )
 
 
+def check_void_history(entries: list[dict[str, object]], name: str) -> None:
+    """A voided attempt must not have been aimed at the holdout either.
+
+    Voided attempts are a different shape from capture artifacts: a list of
+    attempts, each with a reason and its call logs, and no window declaration of
+    its own. The window it was aimed at is in the filename. Both shapes live in
+    the same directory and both are checked, because an attempt that reached for
+    the holdout and failed is still an attempt that reached for the holdout.
+    """
+    assert name.startswith("voided-"), name
+    aimed_at = name.removeprefix("voided-").removesuffix(".json")
+    assert aimed_at == "control", f"{name} records attempts on a non-control window"
+    for index, entry in enumerate(entries):
+        assert isinstance(entry, dict), f"{name} entry {index} is not an attempt record"
+        found = scan_for_holdout_dates(json.dumps(entry))
+        assert not found, f"{name} entry {index} references holdout dates {found}"
+
+
+def _evidence_files() -> list[Path]:
+    """Derived by walking, so a new artifact is covered without an edit here.
+
+    Split by shape rather than assumed to be uniform. The first real run of this
+    control crashed with an AttributeError because the void history had been added
+    to this directory in a later commit than the glob, and a list arrived where a
+    dict was expected. A control that raises on an unfamiliar shape has not
+    checked it, and the difference between "checked and clean" and "crashed before
+    checking" is the whole point of having the control.
+    """
+    if not EVIDENCE_DIR.is_dir():
+        return []
+    return sorted(EVIDENCE_DIR.glob("*.json"))
+
+
 def _capture_artifacts() -> list[Path]:
-    """Derived by walking, so a new artifact is covered without an edit here."""
-    return sorted(EVIDENCE_DIR.glob("*.json")) if EVIDENCE_DIR.is_dir() else []
+    return [path for path in _evidence_files() if not path.name.startswith("voided-")]
+
+
+def _void_histories() -> list[Path]:
+    return [path for path in _evidence_files() if path.name.startswith("voided-")]
 
 
 def test_no_capture_artifact_declares_or_contains_a_holdout_hour() -> None:
     for artifact in _capture_artifacts():
         check_capture_artifact(json.loads(artifact.read_text()), artifact.name)
+
+
+def test_no_voided_attempt_was_aimed_at_the_holdout() -> None:
+    for history in _void_histories():
+        check_void_history(json.loads(history.read_text()), history.name)
+
+
+def test_every_evidence_file_is_covered_by_one_of_the_two_checks() -> None:
+    """No file in the directory may be checked by neither, which is how one was.
+
+    The two checks above each walk their own subset. Without this, a third shape
+    arriving later would be scanned by neither and nothing would say so: the
+    directory would keep reporting green over a file nobody looked at. That is the
+    stale-scope failure again, in a directory rather than a file list.
+    """
+    every = set(_evidence_files())
+    covered = set(_capture_artifacts()) | set(_void_histories())
+    assert every == covered, f"evidence files checked by neither: {sorted(every - covered)}"
 
 
 def test_the_artifact_check_would_notice_both_ways_of_reaching_the_holdout() -> None:
@@ -250,6 +304,20 @@ def test_the_artifact_check_would_notice_both_ways_of_reaching_the_holdout() -> 
     # the label check and be waved through on its declaration alone.
     with pytest.raises(AssertionError, match="records no realized bounds"):
         check_capture_artifact({"window_requested": {"name": "control"}}, "synthetic-bare")
+
+
+def test_the_void_history_check_would_notice_an_attempt_at_the_holdout() -> None:
+    """Proven the same way, because a voided attempt is still an attempt."""
+    start, _ = holdout_span()
+    clean = [{"reason": "returned 404", "voided_at": "2026-08-04T14:13:59Z"}]
+    check_void_history(clean, "voided-control.json")
+
+    with pytest.raises(AssertionError, match="non-control window"):
+        check_void_history(clean, "voided-holdout.json")
+
+    reaching = [{"reason": f"datetime_from={start.strftime('%Y-%m-%d')} returned 500"}]
+    with pytest.raises(AssertionError, match="references holdout dates"):
+        check_void_history(reaching, "voided-control.json")
 
 
 def test_no_holdout_date_appears_on_the_run_surface() -> None:

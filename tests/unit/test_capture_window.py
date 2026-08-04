@@ -206,6 +206,52 @@ def test_the_artifact_names_the_endpoint_and_why_it_is_not_the_archive() -> None
     assert "archive" in source and "computed mean" in source
 
 
+# --- the request URL, which nothing tested until it failed live ---------------
+
+
+def test_the_station_url_does_not_restate_the_version_segment() -> None:
+    """The fault that voided capture attempt 1, now asserted offline.
+
+    ``CII_OPENAQ_BASE_URL`` carries the version, and the endpoint constant used to
+    carry it as well, so the first live call went to /v3/v3/sensors/80/hours and
+    returned 404. Every other test in this module works from a response inwards;
+    none of them built a URL, so the one thing deciding whether a response arrives
+    had no coverage at all.
+    """
+    from capture_window import station_url
+
+    url = station_url("https://api.openaq.org/v3", 80, START, END, 1)
+    assert url.startswith("https://api.openaq.org/v3/sensors/80/hours?")
+    assert "/v3/v3/" not in url
+
+
+def test_the_station_url_matches_the_shipped_adapter() -> None:
+    """The adapter has always built this correctly; the capture must agree with it.
+
+    Asserted against the adapter's own construction rather than against a string
+    written here, so the two cannot drift apart later in the direction that
+    already cost one attempt.
+    """
+    from capture_window import station_url
+    from climate_index.adapters.openaq.source import OpenAQStationSource
+
+    base = "https://api.openaq.org/v3"
+    source = OpenAQStationSource(base_url=base, api_key="x", sensors=(), lag_hours=48)
+    adapter_path = f"{source._base_url}/sensors/80/hours"
+    assert station_url(base, 80, START, END, 1).split("?")[0] == adapter_path
+
+
+def test_the_station_url_carries_the_window_and_the_page() -> None:
+    from capture_window import station_url
+
+    url = station_url("https://api.openaq.org/v3/", 11, START, END, 3)
+    assert f"datetime_from={_stamp(START).replace(':', '%3A')}" in url
+    assert "page=3" in url
+    assert "limit=1000" in url
+    # A trailing slash on the base must not double the separator either.
+    assert "//sensors" not in url.replace("https://", "")
+
+
 # --- voided attempts, and why they are recorded rather than discarded ----------
 
 
