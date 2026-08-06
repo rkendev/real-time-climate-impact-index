@@ -2677,3 +2677,267 @@ describe it. The radius is measured from the grid point the provider returns.
 - If the effort cap is reached with work outstanding, the project ships what
   exists with the unevaluable claims marked unevaluable. A cap that moves is not
   a cap.
+
+## T3c close-out: what this project found, and what it could not do
+
+Recorded 2026-08-06. Every number here is quoted from the single evaluated holdout
+run and its verification output. Nothing is recomputed for this record.
+
+### 1. The headline, in the order settled before a number existed
+
+**AFR is monitored by instruments this threshold cannot use.** Not unmonitored.
+The funnel, from the pinned admission artifact:
+
+| city | radius | in radius | fixed | reference grade | with PM2.5 sensor | admitted |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| Lagos | 25.0 km (capped) | 61 | 61 | 1 | 1 | **0** |
+| Nairobi | 25.0 km (capped) | 16 | 16 | 9 | 9 | **0** |
+| Cairo | 7.4 km | 1 | 1 | 1 | 1 | **0** |
+
+Lagos has sixty-one fixed stations inside the radius and one of them is
+reference-grade. The instruments are there; the threshold cannot be applied to
+them, because the measurement uncertainty it rests on was derived from an
+inter-comparison of reference methods and using it on a low-cost sensor would be
+the wrong tolerance with no way to tell which direction it errs. An entire region
+therefore carries the lower provenance tier permanently and in full, and the
+honest output is a documented state rather than a number.
+
+**A European regulatory convention fails to fit the population it was pointed at,
+in two independent ways.**
+
+*On the time axis.* CPCB's hourly rollups are anchored at `:30`. A period of
+`[23:30, 00:30)` is not `[H, H+1)` for any integer `H`, and the model side has
+values only on the hour, so there is nothing to pair with. **An entire national
+monitoring network's hourly data is inexpressible under the frozen alignment
+rule**: 6,454 rows excluded on the holdout and 6,459 on the control, every one of
+them Delhi, with no other city losing a row on either capture. Rejecting them is
+the alignment rule's own domain and not a new gate: `hasFlags` and `observedCount`
+select among rows that *are* hours, while a `:30` period is not the thing the rule
+quantifies over. The alternative, assigning such a period to the nearest `H`, would
+have invented a convention the contract does not contain, after seeing the data, in
+the direction that retains rows. And the same anchoring at the far boundary
+produces a period straddling the control window's exclusive end, so keeping these
+rows would have imported thirty minutes of holdout time into a control capture
+through a rounding convention nobody wrote down.
+
+*On the value axis.* `T` widens with concentration by design, and at these
+concentrations it is of the same order as the concentration itself. **At the median
+hour in three of the seven evaluated cities, a model reporting zero PM2.5 would
+satisfy the criterion**: Madrid, Berlin and Amsterdam have station medians of 10.8,
+8.5 and 5.0 against tolerances of 11.2, 10.5 and 9.5. Amsterdam's largest ratio of
+difference to tolerance across 156 covered windows is **0.63**; Berlin's across 138
+is **0.71**. Neither city ever reaches its own tolerance. **A rate of 0.0 percent
+there is inexpressibility, not agreement.** This finding first appeared in the
+voided control run on data that turned out to be ozone, and it reappeared unchanged
+on data verified as PM2.5 after the apparatus was rebuilt. A finding that survives
+the instrument which produced it being wrong is the strongest confirmation
+available here.
+
+Neither failure is a defect in the provider, the network, or the rule. Each is a
+mismatch between two conventions, visible only because one of them was frozen
+before any data existed.
+
+**And then the number: 22.8 percent.**
+
+### 2. The three verdicts, in frozen order
+
+**D1: disagreement is reported, never resolved. PASSED.**
+Predicate: *"For every region-window where both sources are present and disagree by
+more than T, the index reports a reduced confidence state and both values, and
+never substitutes one source for the other or averages them into a single
+number."* Witness set: **204 DISAGREED region-windows** on the holdout, so the
+claim is not vacuous, and the contract's own anti-vacuity rule requiring at least
+one flagged window is satisfied 204 times over. The guard is
+`assert_reported_never_resolved`, and it was **proven red in T3a on 2026-08-04 at
+`3f5e773`** by three seeded violations, one for each shape resolution can take:
+substitution, averaging, and preference expressed by dropping one side. The green
+path and every seeded path run through the same function.
+
+**D2: the grade discriminates, and is not inert. PASSED.**
+Predicate: *"On the sealed holdout, the disagreement state fires on more than 1
+percent and fewer than 33 percent of city-windows that have station coverage."*
+Evaluability precondition: at least 200 covered city-windows. Measured: **1,038
+covered city-windows**, established by two independent derivations that agreed.
+**237 flagged. 22.8 percent, inside the band.**
+
+**D3: no fabricated grades. PASSED.**
+Predicate: *"Every region-window with no qualifying station coverage, or with
+coverage below the frozen minimum, carries a documented lower provenance tier. No
+window ever receives a grade computed from data it does not have, and no window
+inherits a grade from a neighbour or from a previous window."* Witness set: **182
+UNCHECKED region-windows** on the holdout against 490 STATION_CHECKED. The guard is
+`assert_tier_earned_by_this_window`, which recomputes each tier from that record's
+own coverage. It was **proven red in T3a on 2026-08-04 at `816a60c`**, both
+branches seeded separately as the contract requires: a computed tier forced onto an
+uncovered window, and a tier inherited from a previous window and from a
+neighbouring region. The fixture-adequacy meta-test was itself proven red against
+three inadequate fixtures, because the inheritance branch is invisible over a
+fixture where the neighbour and the previous window do not differ from the target.
+
+None of the three is NOT EVALUABLE.
+
+Reported alongside, as the contract requires and with no claim bound to any of it:
+per-domain, CAMS Europe **18 of 380** and CAMS global **219 of 658**, carrying the
+confound that the arms are three cities against four rather than two grid
+resolutions. Per city, always as flagged over covered: Tokyo 87/154, New York
+66/168, Chicago 49/168, Madrid 9/48, Los Angeles 17/168, Amsterdam 9/168, Berlin
+0/164. The weaker condition `|Oi - Mi| <= U(Oi)` holds for **554 of 1,038**.
+Negatives retained as the frozen rules require: **137 of 24,812 rows**, 0.55
+percent, median -1.0, New York 73 and Madrid 64. The construction breakdown has an
+**empty computed-mean arm**: all 24,812 retained rows are `PROVIDER_HOURLY`,
+because CPCB was the only multi-sample network and Delhi is excluded by the
+alignment rule.
+
+### 3. Run counters and freeze evidence
+
+Control window: **1 of 1 permitted runs spent**, completed with no apparatus fault.
+Holdout: **opened once, evaluated once, zero re-run allowance, no fault**. The
+holdout's lack of any allowance was pinned in this record before the control run,
+at `a5ec805`, precisely so it could not be settled afterwards in whichever
+direction the state of play required.
+
+Freeze evidence, taken **after** the number at `2026-08-06T19:06:29Z`:
+`git log -- PREREGISTRATION.md` returns the single commit `b81f1c9`, dated
+`2026-08-02`, four days before the holdout was opened. The contract pin is green,
+so the settings still match sections 4.1 and 5 of the document at that commit. The
+immutability control is green, so `PREREGISTRATION.md`, both control evidence
+artifacts, the pinned admission artifact, the re-run counter and the
+control-window disclosure section are byte-identical to their pre-opening state.
+
+That control fired once, on its own detector rather than on an edit: the section
+boundary ran to a named heading that later sections moved. It was corrected by
+extracting the section out of git history at the opening commit `868d8ae` and
+proving it byte-identical to the working tree, 3,965 characters and sha256
+`51c76e7bdee840bc...`, and the replacement hash was derived from that commit rather
+than from the working tree, so it cannot have absorbed a later edit even in
+principle.
+
+### 4. Seven contract defects
+
+Numbered as the record numbers them. Defects five, six and seven are numbered
+explicitly in this ADR; one through four are the four the defect-five section
+characterises collectively. **The gap left by the withdrawal is not closed by
+renumbering.**
+
+| # | Defect | Kind | Status |
+| --- | --- | --- | --- |
+| 1 | `alpha` reported as 0.30 from a summarised fetch of version 3.2; version 3.3 Table 7 gives 0.50 | wrong about the world | corrected in §4.5, contract unamended |
+| 2 | The attribution slip: a build session's reading recorded as the advisor's | wrong about itself | corrected in §4.5 |
+| 3 | §2 states the new E-3 field propagates to four surfaces that in fact carry E-5 | wrong about the codebase | recorded, contract unamended |
+| 4 | Madrid excluded when it admits six stations; Cairo's radius taken from the region label rather than probed | wrong about the world | corrected as evidence, no predicate moved |
+| 5 | §5 names the station source twice and the two disagree: the archive, and `/v3/sensors/{id}/hours` | **inconsistent with itself** | resolved in favour of the endpoint |
+| 6 | ~~Admission's `datetimeFirst`/`datetimeLast` premise is false~~ | **WITHDRAWN** | an artifact of my own instrument, not a fault in the contract |
+| 7 | Admission examines only the first PM2.5 sensor per location and breaks, so it is **stricter** than the rule it implements | code stricter than frozen | recorded, unfixed, shortfall measured at 6 locations all in Delhi |
+
+Defect six is the one worth reading twice. It was asserted on the observation that
+181 of 208 admitted sensors served nothing. That observation was produced by an
+apparatus reading location ids as sensor ids, and when the instrument was repaired
+Tokyo and Los Angeles served normally. **The contract's admission premise was never
+tested, and the first real evidence points the other way.** It is struck rather
+than deleted, with its sequence visible, because a record whose corrections are
+invisible is worth less than one whose corrections are real.
+
+Defect seven is unfixed and the reason is stated as it is, not as it is
+comfortable: repairing it is **required in principle**, because it moves code
+toward what was frozen; it was **unavailable** because one reconciliation run
+remained and a corrected admitted set needs a new artifact, a new capture and a new
+run. **The budget is the reason it is unfixed, not the reason it is acceptable.**
+The measurement is taken over a population that under-counts the frozen rule's
+admissible set, and the shortfall was measured rather than carried as an unknown:
+80 candidate locations examined, **6 recovered**, all in Delhi, which the alignment
+rule excludes regardless, so the defect is real, bounded and inert here.
+
+### 5. The apparatus fault and the two capture voids
+
+**Capture void 1**, diagnosed before repair: the endpoint constant carried `/v3`
+and so did the base URL, so the first station call went to `/v3/v3/sensors/80/hours`
+and returned 404. No test had ever built a URL; every test in the module worked
+from a response inwards.
+
+**Capture void 2**, diagnosed before repair: 21 rows fell outside the requested
+window, the earliest at a `:30` boundary. This is what surfaced the alignment
+mismatch above.
+
+**The apparatus fault**, diagnosed before repair and the largest event in this
+project: `admitted_sensors` assigned an OpenAQ **location** id to a field named
+`sensor_id`, with a docstring stating the sensor id was resolved at fetch time.
+Nothing resolved it. Location and sensor ids are different id spaces that overlap
+numerically, so three of four New York stations returned **ozone in parts per
+million**, recorded as PM2.5 in micrograms per cubic metre. Values of 0.03 are
+type-correct, range-plausible and entirely plausible ozone. The whole first control
+run, its rate of 56.4 percent, and every finding derived from it were retracted.
+
+**What made that survivable was a check demanded before the holdout opened.** The
+fork was stated in advance: if a sensor's own summary agreed with our 0.03, the
+data is what it is and that is a finding; if the sensor's own summary reported
+something else, we are reading something other than what we think and that is an
+apparatus fault. It read the second way. **Had the holdout been opened first, the
+fault would have been discovered after the seal was spent, and no amount of
+disclosure would have recovered it.** The seal opens once; a measurement taken
+through an instrument reading the wrong field is not recoverable afterwards.
+
+The repair is the semantic assertion, not the lookup: every sensor's
+`parameter.name` and `units` are asserted before any hours query, resolution is
+refused rather than guessed when a location offers no PM2.5 sensor or more than one
+covering candidate, and the hours query refuses outright on an unresolved location.
+The seeded proof uses the two real ozone sensors the diagnostic found.
+
+### 6. The findings ledger
+
+**Three frozen provisions are inert, counted on two independent captures.**
+`hasFlags` removed nothing and `observedCount` removed nothing, on the control
+window and on the holdout. The contract pre-committed to counting both during the
+measurement and predicted they might prove inert. They are: the gate admits every
+hour the API returns. Two captures rather than one is the strongest form of that
+answer available here. The third, the retention of negative values, fired on both:
+137 rows on the holdout and 24 on the voided control capture.
+
+**The construction confound was recorded before any rate existed**, in T2, as a
+breakdown fully confounded with city because CPCB was the only multi-sample network
+found. It is now stronger than recorded: the computed-mean arm is not one city, it
+is **empty**.
+
+**The licence breach, with its remedy incomplete.** Real CPCB readings under
+unstated terms were committed as fixtures at `b05a40a` and removed at `cdc7108`,
+with the control that would have caught it added in the same commit. The remedy is
+partial and the residue is disclosed: the values are out of `HEAD` and remain in
+git history. Nothing was rewritten to hide them.
+
+**Seven post-project findings, carried forward UNBUILT and marked UNBUILT.** No
+permanent identifier-resolution gate; NFR-O2 and NFR-R3 without acceptance tests;
+a producer test not isolated from the developer environment; that same test's
+`subprocess.run` without a timeout; **finding 5, the producer reporting
+`published: 8` and exiting zero while `librdkafka` writes connection-refused for
+every attempt, so `make run_producer` looks like it worked, and it is the only
+one of the seven with consequences outside the test suite**; fifteen test call sites reading
+`Settings` without `_env_file=None`; and two mypy configurations that disagree with
+only one running in CI's gate.
+
+### 7. Closing conditions
+
+**CII re-closes with this record.** Gate G2 remains the terminal cloud gate, there
+is no Phase 3, and the reopen that produced this work is discharged: the claims
+were evaluated exactly once against the sealed holdout and ship against the
+contract unmodified.
+
+**What would reopen it again**, in the same form as the trigger that reopened it
+this time. Reopening requires a pre-registration committed before any code exists,
+carrying scope, pass and fail criteria, and a cost cap, under owner self-override.
+It additionally requires a candidate surviving the extension test: a property the
+portfolio does not already have and does not already measure. Three specific
+candidates are named by this project's own findings and none of them is claimed to
+survive that test in advance:
+
+- an alignment rule that can express a `:30`-anchored network, which would restore
+  Delhi and with it the only multi-sample arm of a required breakdown;
+- a tolerance that discriminates at low concentration, which is not a change to the
+  MQO but a different criterion and would need its own citation;
+- a station-population rule tested against the endpoint that serves the
+  measurement, rather than against the metadata that describes it.
+
+Repeating this project with a longer window, more cities, or a second provider does
+**not** survive the extension test, because it would re-measure a property already
+measured here.
+
+The advisor errors in §4.5 and in this ADR stay where they are. The record is not
+tidied. Its value is that its corrections are real.
