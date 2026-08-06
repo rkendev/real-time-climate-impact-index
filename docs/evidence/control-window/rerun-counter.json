@@ -1,9 +1,9 @@
 {
   "schema": "control-window-rerun-counter/1",
-  "note": "The contract permits the control window to be re-run after a diagnosed apparatus repair at most twice. A third fault ships the project as 'the measurement could not be completed' with the three diagnoses. This counter lives in the repository rather than in anyone's recollection.",
+  "note": "The contract permits the control window to be re-run after a diagnosed apparatus repair at most twice. A third fault ships the project as 'the measurement could not be completed' with the three diagnoses. This counter lives in the repository rather than in anyone's recollection. The control-window run was executed once, on 2026-08-06, with no apparatus fault; the single permitted re-run was consumed by the identifier fault before it. The holdout is governed by a different clause and carries no re-run allowance at all.",
   "permitted_reruns": 2,
   "spent": 1,
-  "remaining": 1,
+  "remaining": 0,
   "faults": [
     {
       "n": 1,
@@ -13,5 +13,10 @@
       "repair": "not yet made at the time of writing; resolve location to its pm25 sensor via /v3/locations/{id} and assert parameter and units of every sensor queried",
       "voided_measurement": "docs/evidence/control-window/2026-08-04-control-run.json"
     }
-  ]
+  ],
+  "control_run_completed": {
+    "date": "2026-08-06",
+    "artifact": "docs/evidence/control-window/2026-08-06-control-run.json",
+    "apparatus_fault": false
+  }
 }

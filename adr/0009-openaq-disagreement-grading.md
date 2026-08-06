@@ -2156,6 +2156,92 @@ here a fault could be diagnosed and repaired, and there it cannot. Everything th
 can be checked about the holdout capture must be checked before the holdout
 reconciliation is executed, since there is no second execution to fall back on.
 
+## The control-window run: the rate, and the freeze proved after it
+
+Recorded 2026-08-06. **An apparatus check and not a result.** The control window is
+not the holdout, so D2's 1 to 33 band and its 200 city-window precondition apply to
+none of what follows.
+
+**The run completed with no apparatus fault.** The last permitted control-window
+reconciliation was executed once and returned exit 0.
+
+### The numbers
+
+| | covered city-windows | flagged | rate |
+| --- | ---: | ---: | ---: |
+| **pooled** | **1020** | **109** | **10.7%** |
+| Tokyo (global) | 154 | 58 | 37.7% |
+| New York (global) | 168 | 29 | 17.3% |
+| Los Angeles (global) | 168 | 11 | 6.5% |
+| Chicago (global) | 168 | 9 | 5.4% |
+| Madrid (Europe) | 68 | 2 | 2.9% |
+| Berlin (Europe) | 138 | 0 | 0.0% |
+| Amsterdam (Europe) | 156 | 0 | 0.0% |
+
+Region-windows: 672, of which 484 STATION_CHECKED and 188 UNCHECKED; by state, 377
+AGREED, 107 DISAGREED, 188 NOT_COMPARED. The covered count of 1020 agreed across
+both derivations.
+
+**The union rule now unions.** 109 flagged city-windows produce 107 DISAGREED
+region-windows, so two region-windows carry two flagged cities each. In the voided
+run no region had more than one covered city and the union rule was inert; it is
+not inert here.
+
+**Per domain:** CAMS Europe, three cities, **2 of 362, 0.55%**. CAMS global, four
+cities, **107 of 658, 16.26%**. The contrast survives the repair and is no longer
+total: the voided run showed 0 against 83 with one European city, and this shows
+0.55 against 16.26 across three against four. The confound recorded before that
+run is weakened but not gone, and no reading of these two arms separates grid
+resolution from which cities sit in each.
+
+**The weaker condition**, reported as evidence with no claim bound to it: of 1020
+covered city-windows, 633 satisfy `|Oi - Mi| <= U(Oi)` and 387 do not.
+
+### Nothing moved, and the proof is run after the number
+
+Executed at `2026-08-06T17:47:06Z`, with the rate above already on screen:
+
+```
+$ git log --format=%H -- PREREGISTRATION.md
+b81f1c97ae1a7e69918d918d5636318f57aee791
+
+$ git log --format='%h %ci' -1 -- PREREGISTRATION.md
+b81f1c9 2026-08-02 20:25:16 +0000
+
+$ pytest tests/hygiene/test_settings_match_contract.py
+7 passed
+```
+
+One commit, dated four days before this run, and the settings still match sections
+4.1 and 5 of the document at that commit. T, beta at 2, alpha at 0.50, `Ur(RV)` at
+0.36, `RV` at 25, the minimum coverage of 3, the median rule, the union rule, the 1
+to 33 band and the 200 precondition are all exactly as frozen. **No predicate moved
+after the number was seen.**
+
+The paragraph committed at `97d59e8`, before any capture existed, stands unchanged:
+the holdout opens exactly once regardless of what the control window showed, and
+this rate is not admissible as a reason to skip, shorten or reframe the D2
+evaluation. A pooled 10.7 percent happens to sit inside the 1 to 33 band. **That is
+not a reason to expect anything of the holdout and not a reason to do anything
+differently**, and the fact that it is a more comfortable number than the voided
+run's 56.4 percent is precisely why the paragraph was written before either existed.
+
+### What this run does and does not establish
+
+It establishes that the apparatus completes: it resolves sensors and asserts what
+they measure, applies the frozen alignment, coverage, median and union rules, and
+produces per-city and per-domain figures with its denominator checked twice.
+
+It establishes nothing about D2, which binds on the holdout alone.
+
+The limits recorded before the run stand and are not restated here as though the
+number changed them. The clustering limit now reads over seven city-weeks rather
+than three, which is a larger effective sample than the voided run had and still far
+short of 1020 independent observations.
+
+**Reconciliation runs: 1 of 1 spent. None remain.** Capture voids: 2, both
+diagnosed. The holdout is unopened and carries no re-run allowance of its own.
+
 ## Post-project findings, recorded and not built
 
 Things worth fixing that this project will not fix. Section 2 of the contract
