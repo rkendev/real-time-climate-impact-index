@@ -2120,6 +2120,42 @@ frozen rule. Neither is corrected into agreement with the other, because a
 quietly reconciled pair of records is worth less than a disagreeing pair whose
 reason is written down.
 
+## Before the last control run: two things settled while they are uncontested
+
+Written 2026-08-06, **before the run**, for the same reason the definition of what
+spends an attempt was written before the repair: settling a question afterwards,
+in whichever direction the state you are in requires, is not settling it.
+
+### If this run faults, the project ships "the measurement could not be completed"
+
+That is the contract's pre-registered outcome and it is **acceptable**. Said out
+loud now, before the run, so that if it happens nobody starts looking for a fourth
+attempt or for a reason this fault is different from the others.
+
+The two diagnosed capture voids and the diagnosed apparatus fault ship with it, and
+that is a **complete and honest result**, not a failure to produce one. A project
+that reports what its instrument could and could not do, with each fault diagnosed
+in writing before its repair, has produced evidence. A project that keeps adjusting
+until a number appears has produced a number.
+
+### The counter does not constrain the holdout run, and the holdout has none
+
+The contract caps re-runs of **the control window**. The holdout is governed by a
+different clause entirely: it opens **exactly once, regardless**.
+
+So the re-run allowance does not transfer. **The holdout run carries no re-run
+allowance at all. Not two, not one. Zero.** One attempt, and an apparatus fault
+there is not recoverable by re-running, because re-running is precisely what "opens
+exactly once" forbids.
+
+Two consequences worth stating now rather than discovering later. Whatever remains
+of the control-window allowance after this run is **spent or unspent, and either
+way irrelevant to the holdout**; a leftover attempt is not a credit. And the
+verification discipline built for this run matters more there than here, because
+here a fault could be diagnosed and repaired, and there it cannot. Everything that
+can be checked about the holdout capture must be checked before the holdout
+reconciliation is executed, since there is no second execution to fall back on.
+
 ## Post-project findings, recorded and not built
 
 Things worth fixing that this project will not fix. Section 2 of the contract
