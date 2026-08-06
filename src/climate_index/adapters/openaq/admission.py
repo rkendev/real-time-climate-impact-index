@@ -23,7 +23,8 @@ apply to them.
 from __future__ import annotations
 
 import json
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -130,22 +131,81 @@ def check_pm25_sensor(sensor: Mapping[str, Any], location_id: int) -> int:
     return int(sensor["id"])
 
 
-def resolve_pm25_sensor(payload: Mapping[str, Any], location_id: int) -> int:
-    """Return the PM2.5 sensor id for one location, from its ``/v3/locations`` body.
+class AmbiguousSensorError(SensorIdentityError):
+    """More than one PM2.5 sensor at a location covers the window.
 
-    Refuses rather than guessing. A location with no PM2.5 sensor is a location
-    that cannot contribute, and saying so is different from silently returning the
-    first sensor it has.
+    Counted separately from "none covers it", because they are different facts
+    and only one of them is about availability. Refused rather than resolved: an
+    arbitrary choice between two valid candidates is the same class of defect as
+    the original identifier fault and would be invisible in the output.
+    """
+
+
+def pm25_candidates(payload: Mapping[str, Any], location_id: int) -> list[int]:
+    """Every PM2.5 sensor id at one location, from its ``/v3/locations`` body.
+
+    Returns all of them rather than the first. A location may carry more than one
+    PM2.5 sensor, and location 50 carries two of which one stopped reporting in
+    2018; taking the first is an unrecorded choice even when the first is alive.
     """
     results = payload.get("results") or []
     if not results:
         raise SensorIdentityError(f"location {location_id} returned no body")
     sensors = (results[0] or {}).get("sensors") or []
-    for sensor in sensors:
-        parameter = sensor.get("parameter") or {}
-        if str(parameter.get("name", "")) == PM25_PARAMETER:
-            return check_pm25_sensor(sensor, location_id)
-    offered = sorted(str((s.get("parameter") or {}).get("name", "?")) for s in sensors)
-    raise SensorIdentityError(
-        f"location {location_id} has no {PM25_PARAMETER} sensor; it offers {offered}"
-    )
+    found = [
+        check_pm25_sensor(sensor, location_id)
+        for sensor in sensors
+        if str((sensor.get("parameter") or {}).get("name", "")) == PM25_PARAMETER
+    ]
+    if not found:
+        offered = sorted(str((s.get("parameter") or {}).get("name", "?")) for s in sensors)
+        raise SensorIdentityError(
+            f"location {location_id} has no {PM25_PARAMETER} sensor; it offers {offered}"
+        )
+    return found
+
+
+def brackets_window(meta: Mapping[str, Any], start: datetime, end: datetime) -> bool:
+    """Whether one sensor's own reporting span brackets the capture window.
+
+    Read from ``/v3/sensors/{id}``, which is the sensor's own metadata, rather
+    than from the location's. The admitted set was derived from location-level
+    dates, and a location stays "current" while any of its sensors reports, so a
+    location can bracket the window with a PM2.5 sensor that died years earlier.
+    """
+    first = _instant(meta.get("datetimeFirst"))
+    last = _instant(meta.get("datetimeLast"))
+    if first is None or last is None:
+        return False
+    return first <= start and last >= end
+
+
+def _instant(value: Any) -> datetime | None:
+    text = (value or {}).get("utc") if isinstance(value, dict) else None
+    if not isinstance(text, str):
+        return None
+    try:
+        return datetime.fromisoformat(text.replace("Z", "+00:00")).astimezone(UTC)
+    except ValueError:
+        return None
+
+
+def choose_pm25_sensor(covering: Sequence[int], location_id: int, candidates: Sequence[int]) -> int:
+    """Exactly one covering candidate is taken. None or several are refused.
+
+    Refusing on "several" rather than picking is the point. Two valid candidates
+    is not a tie to be broken by list order; it is a question the capture cannot
+    answer, and answering it arbitrarily would be invisible in every downstream
+    number.
+    """
+    if not covering:
+        raise SensorIdentityError(
+            f"location {location_id} has {len(candidates)} {PM25_PARAMETER} sensor(s) "
+            f"{list(candidates)}, none covering the capture window"
+        )
+    if len(covering) > 1:
+        raise AmbiguousSensorError(
+            f"location {location_id} has {len(covering)} {PM25_PARAMETER} sensors "
+            f"{list(covering)} covering the capture window; refusing to choose"
+        )
+    return covering[0]

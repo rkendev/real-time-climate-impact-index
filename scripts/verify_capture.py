@@ -51,7 +51,7 @@ def latest_artifact(window: str) -> dict[str, Any]:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--window", required=True, choices=("control",))
+    parser.add_argument("--window", required=True, choices=("control", "holdout"))
     args = parser.parse_args(argv)
 
     art = latest_artifact(args.window)

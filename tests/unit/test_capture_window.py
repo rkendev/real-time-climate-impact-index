@@ -356,15 +356,23 @@ def test_only_the_documented_rate_limit_headers_are_recorded() -> None:
 # --- the window is named, never dated -----------------------------------------
 
 
-def test_the_capture_requires_an_explicit_window_and_offers_only_control() -> None:
+def test_the_capture_requires_an_explicit_window_and_offers_only_configured_ones() -> None:
+    """The holdout became nameable when it was opened; nothing else changed.
+
+    This test asserted ``choices == ("control",)`` before the opening, which was
+    the pre-opening invariant. What survives the opening is the part that was
+    never about the holdout: a window must be named explicitly, and it must be
+    one the settings object holds. An unconfigured name is still refused.
+    """
     choices = tuple(sorted(Settings(_env_file=None).reconciliation_windows))
-    assert choices == ("control",)
+    assert choices == ("control", "holdout")
     parser = build_parser(choices)
     with pytest.raises(SystemExit):
         parser.parse_args([])
     with pytest.raises(SystemExit):
-        parser.parse_args(["--window", "holdout"])
+        parser.parse_args(["--window", "everything"])
     assert parser.parse_args(["--window", "control"]).window == "control"
+    assert parser.parse_args(["--window", "holdout"]).window == "holdout"
 
 
 def test_the_capture_takes_no_date_arguments_at_all() -> None:

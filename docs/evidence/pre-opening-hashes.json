@@ -1,0 +1,13 @@
+{
+  "hashes": {
+    "PREREGISTRATION.md": "bda4762124a799da14559760e91e6462c07250d37f4fdad7f39ec273c0328f52",
+    "adr/0009 :: control-window run disclosure": "250ffaf6e672576f34b80f178208e3ed10f6f511520422f07ebc958530ee3149",
+    "docs/evidence/capture/2026-08-06-control.json": "054a82f6db1a65f39e57bb420238072c73f76294bca861d55dc03d4d9a39ae89",
+    "docs/evidence/control-window/2026-08-06-control-run.json": "4e1955103a7834112dfda71f3902f34fb8e8b64110fc2cdaa5bf5b037e495895",
+    "docs/evidence/control-window/rerun-counter.json": "55c8dab3454b12752f6acfd4819d51b0b294f10962fc13fa2ab810a0771dd1b2",
+    "docs/evidence/station-admission/2026-08-03.json": "c95fddde6c8f68f436164ffb888e831e64c99829d29adca3cfa5456583f86264"
+  },
+  "note": "SHA-256 of everything that existed before the holdout was opened, taken at the moment of opening. Once a holdout number exists there is pressure to revisit the control-window write-up, and nothing else detects that. These hashes are the detector. The ADR entry covers the control-run disclosure section only, so the record can keep growing while that section cannot change.",
+  "schema": "pre-opening-hashes/1",
+  "taken_at": "2026-08-06"
+}

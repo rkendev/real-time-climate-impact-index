@@ -2242,6 +2242,86 @@ short of 1020 independent observations.
 **Reconciliation runs: 1 of 1 spent. None remain.** Capture voids: 2, both
 diagnosed. The holdout is unopened and carries no re-run allowance of its own.
 
+## What the flag rate actually tracks: the model's bias, filtered by T's floor
+
+Recorded 2026-08-06, from the spent control run's own output. Deriving
+distributions from a result that already exists is reading it, not running the
+apparatus again, and the figures below are deterministic over the same capture.
+
+Written **before the holdout produces a number**, so that it cannot be read as an
+explanation assembled to fit one.
+
+| city | station med | model med | model bias | T med | T / station | flag rate |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| Tokyo | 11.5 | 20.9 | **+82%** | 11.5 | 1.00 | 37.7% |
+| New York | 9.6 | 15.9 | +67% | 10.8 | 1.13 | 17.3% |
+| Los Angeles | 11.7 | 16.4 | +41% | 11.6 | 0.99 | 6.5% |
+| Chicago | 15.8 | 14.2 | -10% | 13.3 | 0.85 | 5.4% |
+| Madrid | 10.8 | 5.3 | **-51%** | 11.2 | 1.04 | 2.9% |
+| Berlin | 8.5 | 5.0 | **-41%** | 10.5 | 1.23 | 0.0% |
+| Amsterdam | 5.0 | 5.2 | +3% | 9.5 | 1.90 | 0.0% |
+
+**The flag rate tracks the model's bias, and T's floor decides whether that bias is
+visible.** Tokyo's model reads 82 percent high and flags 37.7 percent of its
+windows. Madrid's reads 51 percent **low** and flags 2.9 percent. Berlin's reads 41
+percent low and flags 0.0 percent. Comparable relative error produces wholly
+different rates depending on the absolute concentration it occurs at.
+
+**The mechanism, stated as sharply as the data allows.** At these concentrations
+`T` is of the same order as the concentration itself: the `T / station` column runs
+from 0.85 to 1.90. A model reading **half** the observed value differs from it by
+`0.5 x O`, which is below a tolerance of roughly `1.0 x O`, so it passes. Taken to
+the limit, **a model reporting zero PM2.5 would satisfy the criterion at the median
+hour in Madrid, Berlin and Amsterdam**: their station medians are 10.8, 8.5 and 5.0
+against tolerances of 11.2, 10.5 and 9.5. Three of the seven covered cities would
+agree with a model that reported nothing at all.
+
+**The criterion cannot see large relative error at low absolute values.** That is a
+property of the form, not a malfunction.
+
+**This is a quantified confirmation of the pre-registration's own downward
+pressure, not a defect in the frozen choice.** Section 6 recorded before any data
+existed that `T`'s floor of 9.0 would exceed typical departures and might drive the
+rate down, and section 4 recorded why the MQO was taken whole anyway: it is
+**cited rather than fitted**, and the alternatives were a proportional bar that
+over-flags at low concentration and a flat bar that barely flags there. The floor
+is the price of using a published criterion instead of inventing one, and that
+price was named in advance. What is new here is the magnitude, and that the price
+falls unevenly across cities rather than uniformly.
+
+**The hypothesis survived the instrument that produced it being wrong.** The same
+low-concentration effect was first seen in the voided run, on Madrid, in data that
+turned out to be ozone. It now reappears on Amsterdam and Berlin in data verified
+as PM2.5, with maximum ratios of 0.63 and 0.71 over 156 and 138 windows: neither
+city ever reaches its own tolerance. A finding that persists after the apparatus
+that produced it has been rebuilt is the strongest confirmation available here.
+
+## Opening the holdout: the control window's rate is not an expectation
+
+Recorded with the opening, in the same place as "opens regardless".
+
+The control window returned a pooled 10.7 percent. **That number is not admissible
+as an expectation for the holdout.**
+
+It is not a prediction. It is not a sanity check. It is not a reason to look twice
+at a holdout number that differs from it, in either direction. If the holdout
+returns 40 percent, the answer is not "but the control said 10.7"; if it returns
+1 percent, the answer is not "but the control said 10.7" either. **The
+pre-registered readings are the only readings**, and they are: inside the 1 to 33
+band the grade discriminates; outside it the grade is uninformative and every
+result ships report-only; below 200 covered city-windows D2 is NOT EVALUABLE.
+
+The control window exists to show that the apparatus completes. It did. Nothing
+about a seven-day window in seven cities licenses an expectation about a different
+seven-day window, and the clustering limit already recorded says why: the effective
+number of independent clusters is the number of city-weeks, not the number of
+city-windows.
+
+This is written at the moment of opening for the same reason the "opens regardless"
+paragraph was written before the capture existed. An expectation formed now is a
+constraint on how a later number is read, and the only defence against it is to
+have refused it in writing beforehand.
+
 ## Post-project findings, recorded and not built
 
 Things worth fixing that this project will not fix. Section 2 of the contract

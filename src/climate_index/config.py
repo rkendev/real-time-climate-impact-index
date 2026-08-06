@@ -370,19 +370,30 @@ class Settings(BaseSettings):
     # of two tolerates none (contract section 5).
     station_min_per_city_window: int = 3
 
-    # The windows a reconciliation run may be pointed at, by name. There is
-    # deliberately exactly one entry: the control window. The holdout is not
-    # expressible through this object, through the entry point, or anywhere else in
-    # the run surface, so it cannot be reached by a typo, a default or a stray
-    # date. Adding its entry is the act of opening the seal and is its own dated
-    # record. The guard that enforces this is
-    # tests/hygiene/test_holdout_not_opened.py.
+    # The windows a reconciliation run may be pointed at, by name.
+    #
+    # The holdout entry was added on 2026-08-06 and adding it IS the opening of
+    # the seal; the commit that introduced it is the dated record of when. Before
+    # that this held only the control window, and tests/hygiene/
+    # test_holdout_not_opened.py asserted the holdout was not nameable anywhere.
+    # That control retired in the same commit, replaced by
+    # tests/hygiene/test_holdout_opened_once.py, which asserts the holdout is
+    # opened exactly once and that nothing written before the opening has moved
+    # since.
+    #
+    # The holdout carries no re-run allowance. The contract caps re-runs of the
+    # control window; the holdout is governed by a different clause and opens
+    # exactly once, so an apparatus fault there is not recoverable by re-running.
     reconciliation_windows: dict[str, WindowSpan] = Field(
         default_factory=lambda: {
             "control": WindowSpan(
                 start=datetime(2026, 7, 17, tzinfo=UTC),
                 end=datetime(2026, 7, 24, tzinfo=UTC),
-            )
+            ),
+            "holdout": WindowSpan(
+                start=datetime(2026, 7, 24, tzinfo=UTC),
+                end=datetime(2026, 7, 31, tzinfo=UTC),
+            ),
         }
     )
 
