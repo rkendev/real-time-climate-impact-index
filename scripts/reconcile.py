@@ -180,6 +180,9 @@ def summarize(
             "An apparatus check and not a result. The rate below is the control "
             "window's and is not a D2 evaluation: D2's band and its evaluability "
             "precondition apply to the holdout and to nothing else."
+            if name == "control"
+            else "The D2 evaluation. The band and the evaluability precondition "
+            "apply to this window and to nothing else."
         ),
         "region_windows": len(records),
         "covered_city_windows": covered,

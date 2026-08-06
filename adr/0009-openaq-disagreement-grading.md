@@ -2322,6 +2322,191 @@ paragraph was written before the capture existed. An expectation formed now is a
 constraint on how a later number is read, and the only defence against it is to
 have refused it in writing beforehand.
 
+## The holdout, opened once and evaluated once
+
+Recorded 2026-08-06. The holdout reconciliation ran once, with no re-run
+allowance, and completed with no apparatus fault.
+
+**This section does not lead with the rate.** That ordering was settled before the
+number existed and does not move now. A rate is magnetic; the findings below are
+the ones that survive it.
+
+### What this project found, in the order that matters
+
+**AFR is monitored by instruments this threshold cannot use.** Not thinly
+monitored: unusable. No reference-grade PM2.5 station covers the capture window
+near Lagos, Nairobi or Cairo at any radius tested, so an entire region carries the
+lower provenance tier permanently and in full. The measurement uncertainty the
+tolerance rests on was derived from an inter-comparison of reference methods, so
+applying it to a low-cost sensor would be the wrong tolerance with no way to tell
+which direction it errs. The honest output is a documented state, not a number,
+and D3 exists to make that state say so.
+
+**A European criterion fails to fit Delhi in two independent ways.** On the time
+axis, CPCB's hourly rollups are anchored at `:30`, and `[23:30, 00:30)` is not
+`[H, H+1)` for any integer `H`, so the frozen alignment defines no comparison for
+an entire national monitoring network: 6454 rows excluded in the holdout, 6459 in
+the control, every one of them Delhi and no other city losing a row. On the value
+axis, the same criterion behaves differently at Delhi's concentrations than at
+Madrid's, because `T` widens with concentration by design.
+
+**The criterion cannot see large relative error at low absolute values.** `T` is of
+the same order as the concentration at these levels, so a model reading half the
+observed value passes. At the median hour in Madrid, Berlin and Amsterdam **a model
+reporting zero PM2.5 would satisfy the criterion**. Berlin flags 0 of 164 here and
+0 of 138 on the control window, and its model reads 41 percent low. That is a
+quantified confirmation of the pre-registration's own disclosed downward pressure,
+not a defect in the frozen choice: the MQO was taken because it is cited rather
+than fitted, and the floor is the price of that, named in advance.
+
+**Neither of these is a defect in the provider, the network, or the rule.** Each is
+a mismatch between two conventions, visible only because one of them was frozen
+before any data existed.
+
+### D2, read straight off the frozen band
+
+**Evaluability precondition.** 1038 covered city-windows against a floor of 200.
+**MET.** The count was established by two independent derivations that agreed,
+which is what the cross-check exists to require.
+
+**Pooled: 237 of 1038, 22.8 percent.** The band is more than 1 percent and fewer
+than 33 percent. **22.8 percent is inside it. D2 PASSES on its frozen predicate.**
+
+Per city, always as flagged over covered, because a bare percentage over 48 windows
+invites a comparison it cannot support and Madrid is one third of the European arm:
+
+| city | domain | flagged / covered | rate |
+| --- | --- | ---: | ---: |
+| Tokyo | global | 87 / 154 | 56.5% |
+| New York | global | 66 / 168 | 39.3% |
+| Chicago | global | 49 / 168 | 29.2% |
+| Madrid | Europe | 9 / 48 | 18.8% |
+| Los Angeles | global | 17 / 168 | 10.1% |
+| Amsterdam | Europe | 9 / 168 | 5.4% |
+| Berlin | Europe | 0 / 164 | 0.0% |
+
+**Per domain:** CAMS Europe, three cities, **18 of 380, 4.7 percent**. CAMS global,
+four cities, **219 of 658, 33.3 percent**. Recorded as the contract requires and
+carrying the confound recorded before the run: the arms are three cities against
+four, not two grid resolutions, and no reading of them separates resolution from
+which cities sit in each.
+
+**Region-windows:** 672, of which 490 STATION_CHECKED and 182 UNCHECKED; 286
+AGREED, 204 DISAGREED.
+
+**The weaker condition**, evidence only with no claim bound to it: 554 of 1038
+satisfy `|Oi - Mi| <= U(Oi)`, and 484 do not.
+
+**Construction breakdown: the computed-mean arm is empty.** All 24812 retained rows
+are `PROVIDER_HOURLY`. CPCB was the only multi-sample network and Delhi is excluded
+by the alignment rule, so the breakdown the contract requires cannot be produced.
+Reported as an empty arm with its reason rather than omitted.
+
+**Negatives, retained as the frozen rules require:** 137 of 24812 rows, 0.55
+percent. Median -1.0, range -4.6 to -0.1, distributed as 101 in `[-1, 0)` and 36 in
+`[-5, -1)`. By city: New York 73, Madrid 64. No sentinel values in this window,
+unlike the voided capture.
+
+**Both frozen validity conditions are inert, now on two independent captures.**
+`hasFlags` removed nothing and `observedCount` removed nothing, on the control
+window and on the holdout. The contract pre-committed to counting these during the
+measurement and predicted they might prove inert; that is now answered by counts
+from two captures rather than one, which is the strongest form available here. The
+gate admits every hour the API returns, and the finding is that it is a no-op over
+this population rather than a filter.
+
+### Nothing moved, proved after the number
+
+Executed at `2026-08-06T19:06:29Z`, with the holdout rate already on screen:
+
+```
+$ git log --format=%H -- PREREGISTRATION.md
+b81f1c97ae1a7e69918d918d5636318f57aee791
+
+$ git log --format='%h %ci' -1 -- PREREGISTRATION.md
+b81f1c9 2026-08-02 20:25:16 +0000
+
+$ pytest tests/hygiene/test_settings_match_contract.py \
+         tests/hygiene/test_holdout_opened_once.py
+20 passed
+```
+
+One commit, dated four days before the holdout was opened. The settings still match
+sections 4.1 and 5. And the immutability control passes, which is the new part:
+`PREREGISTRATION.md`, both control evidence artifacts, the pinned admission
+artifact, the re-run counter and the control-window disclosure section are all
+byte-identical to their state before the opening. **Nothing written before the
+holdout was seen has been revised since**, and that is checked by hash rather than
+asserted.
+
+The control window's 10.7 percent was recorded at the opening as not admissible as
+an expectation. The holdout returned 22.8 percent. The difference is not
+interpreted here, in either direction.
+
+### The drift check is complete, and what it cost
+
+Sensors are location-owned and the resolver picks only from a location's own sensor
+list, so a location cannot resolve to another location's sensor and a pairwise swap
+is impossible. The supporting fact is asserted rather than assumed: 208 locations,
+208 distinct resolved sensor ids, none shared between locations and none equal to
+its own location id. Given that, comparing the multiset of resolved sensor ids is
+equivalent to comparing the mapping pair by pair, so **the check between the two
+captures is complete rather than partial**, and it passed: identical on all 208.
+
+**The trade is worth naming.** The immutability control made the control artifact
+un-editable, which is exactly its job, and the price was that a later comparison had
+to work from the sorted id list rather than a per-location mapping. That was the
+right trade: a frozen record that supports a slightly weaker check beats an editable
+one that supports a stronger check nobody can trust. The artifact now carries
+`location_to_sensor`, so the next comparison is exact by construction.
+
+### A defect in the run artifact, recorded and not repaired
+
+`docs/evidence/holdout-run.json` carries a `note` field reading "The rate below is
+the control window's and is not a D2 evaluation". That text was templated for the
+control run and is **wrong** for this one: this is the D2 evaluation. The numbers
+are unaffected, and the artifact is left exactly as the run produced it rather than
+edited afterwards, because editing a result artifact after seeing it is the move
+this project spent its whole apparatus refusing. The template is fixed in the code
+for any future run, and this paragraph is the correction.
+
+## The immutability control fired, on its own detector
+
+Recorded 2026-08-06, immediately after the holdout disclosure was written.
+
+The control asserting that the control-window disclosure is unchanged since the
+opening went **red**. It was not an edit. It was a defect in the detector, and it
+is recorded here rather than quietly fixed, because a guard that fires on itself is
+exactly the thing that would otherwise be silenced.
+
+**What went wrong.** The section was extracted from its own heading to the
+`## Post-project findings` heading. That boundary is not fixed. Every section
+appended before Post-project findings enlarged the extracted region, so the hash
+changed whenever the record grew, which is the opposite of the intent: the record
+is supposed to keep growing while that one section stops changing. Writing the
+holdout disclosure grew the extraction from 8685 characters to 16548 and the hash
+moved with it.
+
+**How it was checked rather than assumed.** The section was extracted from the ADR
+as it stood at commit `868d8ae`, the opening commit, read out of git history, and
+compared against the working tree under a corrected boundary. **Both are 3965
+characters with sha256 `51c76e7bdee840bc...`, byte-identical.** The disclosure had
+not changed. Only the ruler had.
+
+**The correction.** The boundary is now the next `## ` heading, whatever it is. The
+stored hash is replaced with the value derived from **the opening commit in git
+history**, not from the current working tree, so the corrected value cannot have
+absorbed a later edit even in principle. The superseded value and the derivation
+are both recorded in `docs/evidence/pre-opening-hashes.json` rather than
+overwritten silently.
+
+**The distinction that matters.** This corrects the detector, not the thing
+detected. A hash record updated because the guarded text changed would be the
+project's central failure; a hash record updated because the boundary was
+mis-specified, with the guarded text proven identical out of immutable history,
+is a repair. The difference is that the proof came from git rather than from the
+file the change would have touched.
+
 ## Post-project findings, recorded and not built
 
 Things worth fixing that this project will not fix. Section 2 of the contract

@@ -1,0 +1,52 @@
+{
+  "covered_city_windows": 1038,
+  "flagged_city_windows": 237,
+  "note": "An apparatus check and not a result. The rate below is the control window's and is not a D2 evaluation: D2's band and its evaluability precondition apply to the holdout and to nothing else.",
+  "per_city": {
+    "Amsterdam": {
+      "covered": 168,
+      "flagged": 9
+    },
+    "Berlin": {
+      "covered": 164,
+      "flagged": 0
+    },
+    "Chicago": {
+      "covered": 168,
+      "flagged": 49
+    },
+    "Los Angeles": {
+      "covered": 168,
+      "flagged": 17
+    },
+    "Madrid": {
+      "covered": 48,
+      "flagged": 9
+    },
+    "New York": {
+      "covered": 168,
+      "flagged": 66
+    },
+    "Tokyo": {
+      "covered": 154,
+      "flagged": 87
+    }
+  },
+  "region_windows": 672,
+  "region_windows_by_state": {
+    "AGREED": 286,
+    "DISAGREED": 204,
+    "NOT_COMPARED": 182
+  },
+  "region_windows_by_tier": {
+    "STATION_CHECKED": 490,
+    "UNCHECKED": 182
+  },
+  "schema": "reconciliation-run/1",
+  "weaker_condition": {
+    "covered": 1038,
+    "outside_u": 484,
+    "within_u": 554
+  },
+  "window": "holdout"
+}

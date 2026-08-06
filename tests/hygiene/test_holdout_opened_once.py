@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 from pathlib import Path
 
 import pytest
@@ -55,8 +56,14 @@ def control_disclosure_text() -> str:
     text = ADR.read_text()
     assert text.count(CONTROL_SECTION) == 1, "the control disclosure heading is not unique"
     start = text.index(CONTROL_SECTION)
-    end = text.index("## Post-project findings", start)
-    return text[start:end]
+    # The next top-level heading, not a named one. The first version of this ran
+    # to "## Post-project findings", which is not a fixed boundary: every section
+    # appended before it enlarged the extracted region, so the hash changed
+    # whenever the record grew. The control fired on its own detector rather than
+    # on a real edit, which is the failure mode a boundary must not have.
+    following = re.search(r"\n## ", text[start + len(CONTROL_SECTION) :])
+    assert following is not None, "no heading follows the control disclosure"
+    return text[start : start + len(CONTROL_SECTION) + following.start() + 1]
 
 
 # --- opened exactly once ------------------------------------------------------
@@ -159,3 +166,31 @@ def test_the_hash_record_covers_every_file_it_should() -> None:
         ADR_KEY,
     }
     assert required <= recorded, f"unguarded: {sorted(required - recorded)}"
+
+
+# --- the drift check is complete, by argument plus a checked fact --------------
+
+
+def test_no_sensor_is_shared_between_two_locations() -> None:
+    """The fact that closes the multiset-comparison gap.
+
+    Sensors are location-owned: the resolver picks only from a location's own
+    sensor list, so a location cannot resolve to another location's sensor and a
+    pairwise swap is impossible. Given that, comparing the multiset of resolved
+    sensor ids is equivalent to comparing the mapping pair by pair, and the drift
+    check between the control and holdout captures is complete rather than
+    partial.
+
+    This asserts the supporting fact rather than assuming it: every resolved
+    sensor id appears against exactly one location.
+    """
+    artifacts = [
+        p for p in CAPTURE_EVIDENCE.glob("*holdout*.json") if not p.name.startswith("voided-")
+    ]
+    if not artifacts:
+        pytest.skip("no holdout capture yet")
+    mapping = json.loads(artifacts[0].read_text())["admission"]["location_to_sensor"]
+    assert len(set(mapping.values())) == len(mapping), "a sensor id is shared between locations"
+    # And no sensor id equals its location id, which is the original fault's
+    # signature and would mean the resolution step had been bypassed.
+    assert not [loc for loc, sensor in mapping.items() if int(loc) == sensor]
