@@ -568,6 +568,7 @@ def build_artifact(
     resolution: dict[str, Any] | None = None,
     misaligned: dict[str, int] | None = None,
     city_exclusions: dict[str, str] | None = None,
+    mapping: dict[str, int] | None = None,
 ) -> dict[str, Any]:
     """The dated evidence artifact, in the form the admission artifact established."""
     voided = voided if voided is not None else []
@@ -599,6 +600,12 @@ def build_artifact(
             "version": admission_version,
             "sensors": len(sensor_ids),
             "sensor_ids": sorted(sensor_ids),
+            # The mapping, not only the ids. OpenAQ's sensor ordering at a
+            # location is stable within a window and not over time, so the same
+            # location can resolve to a different sensor between two captures
+            # taken days apart. The ambiguity refusal stops a wrong pick; it does
+            # not stop a different one, and only the mapping makes that visible.
+            "location_to_sensor": dict(sorted(mapping.items())) if mapping else {},
         },
         "run": {
             "station": station_log.as_dict(),
@@ -813,6 +820,7 @@ def main(argv: list[str] | None = None) -> int:
         gate=gate,
         misaligned=misaligned,
         city_exclusions=city_exclusion_reasons(admitted, stations, misaligned),
+        mapping={str(loc.location_id): int(loc.pm25_sensor_id or 0) for loc in resolved},
     )
     assert_breakdowns_sum(record)
     EVIDENCE_DIR.mkdir(parents=True, exist_ok=True)

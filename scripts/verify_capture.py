@@ -49,6 +49,49 @@ def latest_artifact(window: str) -> dict[str, Any]:
     return loaded
 
 
+def compare_resolution(window: str) -> list[str]:
+    """The holdout must have been measured on the same instrument as the control.
+
+    OpenAQ's sensor ordering at a location is stable within a window and not over
+    time, observed directly on location 50 across two days. So the same location
+    can resolve to a *different* sensor between two captures. The ambiguity
+    refusal stops a wrong pick; it does not stop a different one, and every other
+    check on the verification list would pass while the two halves of the
+    measurement sat on different instruments.
+
+    The admitted set is identical by construction, because admission brackets the
+    whole fourteen days. Any difference here is therefore **resolution drift**,
+    not a population change, and the two are reported as different things.
+
+    The control artifact predates the per-location mapping and records the
+    resolved sensor ids as a sorted list, so the comparison is on that list. It
+    detects any location resolving to a sensor the control run did not use. The
+    one thing it cannot see is two locations swapping sensors with each other,
+    which is noted rather than claimed away.
+    """
+    if window == "control":
+        return []
+    control, holdout = latest_artifact("control"), latest_artifact(window)
+    a = control.get("admission", {})
+    b = holdout.get("admission", {})
+    problems: list[str] = []
+    if a.get("version") != b.get("version"):
+        problems.append(
+            f"admission artifact version differs: control {a.get('version')!r}, "
+            f"{window} {b.get('version')!r} (a population change, not drift)"
+        )
+    ca, cb = sorted(a.get("sensor_ids") or []), sorted(b.get("sensor_ids") or [])
+    if ca != cb:
+        only_control = sorted(set(ca) - set(cb))
+        only_holdout = sorted(set(cb) - set(ca))
+        problems.append(
+            f"RESOLUTION DRIFT: {len(only_control)} sensors used by the control run "
+            f"and not by {window}, {len(only_holdout)} the reverse. "
+            f"control-only {only_control[:8]}, {window}-only {only_holdout[:8]}"
+        )
+    return problems
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--window", required=True, choices=("control", "holdout"))
@@ -117,6 +160,19 @@ def main(argv: list[str] | None = None) -> int:
         print(f"  {city:<13}{qualifying.get(city, 0):>6}")
     print(f"  {'TOTAL':<13}{sum(qualifying.values()):>6}")
     print(f"\nmodel rows: {len(models)}")
+
+    print("\n== instrument identity against the control capture ==")
+    problems = compare_resolution(args.window)
+    if args.window == "control":
+        print("  (control window; nothing to compare against)")
+    elif problems:
+        for line in problems:
+            print(f"  FINDING: {line}")
+        print("\n  STOP. The two halves were not measured on the same instrument.")
+        return 3
+    else:
+        control_ids = latest_artifact("control").get("admission", {}).get("sensor_ids") or []
+        print(f"  identical: all {len(control_ids)} resolved sensor ids match the control")
     return 0
 
 
