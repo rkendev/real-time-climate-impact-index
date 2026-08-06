@@ -10,6 +10,78 @@ Github repo: github.com/rkendev/real-time-climate-impact-index
 
 Write-up: [docs/CII_writeup.md](docs/CII_writeup.md)
 
+## Limits, before any number
+
+This project measured how often a ground station and a model disagree about
+surface PM2.5. The measurement has real limits, and they are stated here because a
+reader who meets the number first will carry it past them.
+
+**Seven cities were evaluated. An eighth was excluded, and the reason is a
+finding.** Delhi's forty-two admitted locations serve data through the endpoint
+the project uses, but their hourly periods are anchored at half past the hour. The
+frozen alignment rule pairs both sources on the hour, and a period running from
+23:30 to 00:30 is not an hour on that grid, so there is nothing to pair it with.
+6,454 rows were excluded on the evaluated window, every one of them Delhi. A
+European regulatory alignment convention cannot express an entire national
+monitoring network's data. That is not a defect in the network or in the rule; it
+is a mismatch between two conventions, and it was only visible because one of them
+was fixed in advance.
+
+**The tolerance cannot see large relative error at low concentrations.** It widens
+with concentration by design, and at the levels these cities report it is of the
+same order as the concentration itself. At the median hour in three of the seven
+cities, a model reporting zero would still pass. Amsterdam and Berlin report zero
+disagreement across 156 and 138 windows, and that is the criterion being unable to
+express disagreement there rather than the two sources agreeing.
+
+**Most region-windows could be checked. A substantial minority could not.** Of 672
+region-windows, 490 carry STATION_CHECKED and 182 carry UNCHECKED. UNCHECKED is a
+documented output state and not an error: it means no qualifying station coverage
+existed for that window, so the index value stands unverified rather than wrong.
+One of the four regions carries it permanently, because no reference-grade PM2.5
+station covers the measurement window near any of its three cities.
+
+**The two model domains are not a clean comparison.** Europe is served at 0.1
+degree resolution and the rest of the world at 0.4 degrees, and the per-domain
+figures below are reported because the design requires them. They are three cities
+against four, not two resolutions against each other, and no reading of them
+separates grid size from which cities happen to sit in each arm. The confound is
+restated here rather than resolved, because the design does not separate it and no
+analysis afterwards can.
+
+**The measurement ran once.** One control run to prove the apparatus completes, and
+one evaluation against a sealed holdout that was opened exactly once. There are no
+repeats, no best-of, and no second look. The full record, including three
+apparatus faults that were diagnosed in writing before any repair, is in
+[`adr/0009-openaq-disagreement-grading.md`](adr/0009-openaq-disagreement-grading.md).
+
+## What the measurement found
+
+Across 1,038 comparable city-hours in seven cities over seven days in July 2026,
+the two sources disagreed by more than the published tolerance in **237 of them,
+22.8 percent**.
+
+By model domain: Europe 18 of 380, and the global grid 219 of 658. By city, always
+as flagged over comparable, because a rate over 48 hours does not mean what a rate
+over 168 hours means:
+
+| city | domain | flagged / comparable |
+| --- | --- | ---: |
+| Tokyo | global | 87 / 154 |
+| New York | global | 66 / 168 |
+| Chicago | global | 49 / 168 |
+| Madrid | Europe | 9 / 48 |
+| Los Angeles | global | 17 / 168 |
+| Amsterdam | Europe | 9 / 168 |
+| Berlin | Europe | 0 / 164 |
+
+The criteria for what would count as a pass, a fail, or an uninformative result
+were written down and committed before any of this data was fetched, and were not
+changed afterwards. The commit that fixed them is dated four days before the
+sealed data was opened, and that ordering is checkable in the history rather than
+asserted.
+
+
 ## What it is
 
 Most streaming demos show a number moving on a chart and ask you to trust it. This project takes the opposite stance: every index value is paired with a confidence label that is computed from how much clean data actually backed that window, and readings that fail validation are quarantined rather than silently averaged in. If the evidence for a region is thin, the dashboard says so instead of pretending the number is solid.
@@ -131,8 +203,8 @@ Every functional requirement (FR-), non-functional requirement (NFR-), use case 
 
 ## What the station coverage actually looks like
 
-Stated above any number this project reports, because it is the strongest thing
-the work has established and it is a limitation rather than a result.
+The detail behind the coverage limit stated at the top of this page. It is the
+strongest thing the work established, and it is a limitation rather than a result.
 
 AFR is monitored. Sixty-one fixed stations sit near Lagos, sixteen near Nairobi,
 twenty-seven near Jakarta. **None of it is usable by the comparison this project
@@ -143,9 +215,9 @@ absence, and it is a finding about the available data rather than about the
 continent.
 
 The consequence is that one of the index's four regions cannot be independently
-checked at all and carries the lower provenance tier permanently. Any rate this
-project reports describes the eight cities that could be checked, and it does not
-generalise to the ones that could not.
+checked at all and carries the lower provenance tier permanently. The rate this
+project reports describes the seven cities that were evaluated over one week, and
+it does not generalise to the ones that could not be checked.
 
 The figures come from a re-verification over all twelve configured cities, at a
 compliant request rate, in which every station call returned 200 and none was
