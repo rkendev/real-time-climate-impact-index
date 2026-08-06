@@ -19,7 +19,7 @@ from climate_index.adapters.openaq.admission import (
     PM25_PARAMETER,
     PM25_UNITS,
     SensorIdentityError,
-    resolve_pm25_sensor,
+    pm25_candidates,
 )
 
 # Transcribed from live /v3/locations responses during the fault diagnosis.
@@ -55,8 +55,8 @@ OZONE_ONLY = {
 
 def test_a_location_resolves_to_its_pm25_sensor_not_its_location_id() -> None:
     """The whole fault in one assertion: 857 resolves to 1534, never to 857."""
-    assert resolve_pm25_sensor(FORT_LEE, 857) == 1534
-    assert resolve_pm25_sensor(JERSEY_CITY, 928) == 5077566
+    assert pm25_candidates(FORT_LEE, 857) == [1534]
+    assert pm25_candidates(JERSEY_CITY, 928) == [5077566]
 
 
 def test_a_location_offering_only_ozone_is_refused() -> None:
@@ -66,13 +66,13 @@ def test_a_location_offering_only_ozone_is_refused() -> None:
     actually serves, it refuses instead of returning numbers.
     """
     with pytest.raises(SensorIdentityError, match="no pm25 sensor"):
-        resolve_pm25_sensor(OZONE_ONLY, 857)
+        pm25_candidates(OZONE_ONLY, 857)
 
 
 def test_the_refusal_names_what_was_offered_instead() -> None:
     """A refusal that does not say what it found is a refusal nobody can diagnose."""
     with pytest.raises(SensorIdentityError, match=r"\['o3'\]"):
-        resolve_pm25_sensor(OZONE_ONLY, 857)
+        pm25_candidates(OZONE_ONLY, 857)
 
 
 def test_right_parameter_in_wrong_units_is_refused() -> None:
@@ -87,14 +87,14 @@ def test_right_parameter_in_wrong_units_is_refused() -> None:
         ]
     }
     with pytest.raises(SensorIdentityError, match="not 'pm25'|µg/m³"):
-        resolve_pm25_sensor(wrong_units, 1)
+        pm25_candidates(wrong_units, 1)
 
 
 def test_a_location_with_no_sensors_or_no_body_is_refused() -> None:
     with pytest.raises(SensorIdentityError, match="no pm25 sensor"):
-        resolve_pm25_sensor({"results": [{"id": 5, "sensors": []}]}, 5)
+        pm25_candidates({"results": [{"id": 5, "sensors": []}]}, 5)
     with pytest.raises(SensorIdentityError, match="returned no body"):
-        resolve_pm25_sensor({"results": []}, 5)
+        pm25_candidates({"results": []}, 5)
 
 
 def test_the_hours_query_refuses_an_unresolved_location() -> None:

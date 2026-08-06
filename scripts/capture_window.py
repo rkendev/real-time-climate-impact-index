@@ -53,8 +53,9 @@ import urllib.error
 import urllib.parse
 import urllib.request
 from collections import Counter
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field, replace
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -77,6 +78,7 @@ PAGE_LIMIT = 1000
 # The shipped adapter builds the same URL at source.py:240 and has always been
 # right; the fix is to match it rather than to restate the path a second time.
 OPENAQ_HOURS_PATH = "/sensors/{sensor_id}/hours"
+_ONE_HOUR = timedelta(hours=1)
 OPEN_METEO_AIR_QUALITY = "https://air-quality-api.open-meteo.com/v1/air-quality"
 
 
@@ -252,7 +254,9 @@ def station_rows(
         if not isinstance(entry, dict):
             tally["malformed"] += 1
             continue
-        moment = _parse_hour(entry.get("period", {}).get("datetimeFrom"))
+        period = entry.get("period") or {}
+        moment = _parse_hour(period.get("datetimeFrom"))
+        ends = _parse_hour(period.get("datetimeTo"))
         value = entry.get("value")
         coverage = entry.get("coverage") or {}
         observed = coverage.get("observedCount")
@@ -263,6 +267,15 @@ def station_rows(
             continue
         if moment is None or not isinstance(value, int | float):
             tally["malformed"] += 1
+            continue
+        if ends is None or ends - moment != _ONE_HOUR:
+            # A separate shape from a bad anchor, counted separately so the two
+            # stay distinguishable. [23:00, 00:30) starts on the hour and is
+            # still not [H, H+1), and an anchor check alone would pass it.
+            tally["period_not_one_hour_long"] += 1
+            offcut = misaligned if misaligned is not None else {}
+            key = f"{sensor['city']}/{sensor['station_id']}"
+            offcut[key] = offcut.get(key, 0) + 1
             continue
         if moment.minute or moment.second or moment.microsecond:
             # Not a gate on admissibility: a gate on whether this is an hour at
@@ -385,6 +398,90 @@ def _by_city_counts(misaligned: dict[str, int]) -> dict[str, int]:
     return dict(sorted(out.items()))
 
 
+def city_exclusion_reasons(
+    admitted: Sequence[Any], retained: Sequence[Mapping[str, Any]], misaligned: Mapping[str, int]
+) -> dict[str, str]:
+    """Why each admitted city contributed nothing, distinguished by cause.
+
+    Delhi and Lagos both end UNCHECKED and they are not the same fact. Lagos has
+    no reference-grade PM2.5 station within its radius at all. Delhi has
+    forty-two locations serving data through the endpoint the contract names,
+    whose hourly periods the contract's alignment cannot express. The state
+    machine has one state for both and the record must not.
+    """
+    contributing = {str(row["city"]) for row in retained}
+    off_by_city: dict[str, int] = {}
+    for key, count in misaligned.items():
+        city = key.split("/", 1)[0]
+        off_by_city[city] = off_by_city.get(city, 0) + count
+    reasons: dict[str, str] = {}
+    for city in sorted({str(loc.city) for loc in admitted}):
+        if city in contributing:
+            continue
+        if off_by_city.get(city):
+            reasons[city] = (
+                f"served {off_by_city[city]} rows whose hourly periods are not "
+                "[H, H+1); the frozen alignment cannot express them"
+            )
+        else:
+            reasons[city] = "no admitted location served any qualifying hour"
+    return reasons
+
+
+def assert_breakdowns_sum(record: Mapping[str, Any]) -> None:
+    """Every breakdown must sum to the total it sits beside.
+
+    A breakdown that reads zero with no total beside it is invisible, and that is
+    not hypothetical: the off-hour per-station map was never passed to this
+    function and reported 0 against a gate total of 3139, which was read as "no
+    concentration" rather than "not recorded". A total without its parts, or
+    parts without their total, is a number nobody can check.
+    """
+    gate = record.get("validity_gate") or {}
+    if gate:
+        returned, retained = int(gate.get("returned", 0)), int(gate.get("retained", 0))
+        removed = sum(int(v) for k, v in gate.items() if k not in ("returned", "retained"))
+        if returned != retained + removed:
+            raise CaptureFault(
+                f"gate breakdown does not sum: returned {returned}, "
+                f"retained {retained} plus removed {removed}"
+            )
+    off = record.get("period_not_hour_aligned") or {}
+    if off:
+        rows = int(off.get("rows", 0))
+        by_station = sum(int(v) for v in (off.get("by_station") or {}).values())
+        by_city = sum(int(v) for v in (off.get("by_city") or {}).values())
+        if not (rows == by_station == by_city):
+            raise CaptureFault(
+                f"off-hour breakdown does not sum: rows {rows}, "
+                f"by_station {by_station}, by_city {by_city}"
+            )
+        if rows != int(gate.get("period_not_hour_aligned", rows)):
+            raise CaptureFault(
+                f"off-hour rows {rows} disagree with the gate count "
+                f"{gate.get('period_not_hour_aligned')}"
+            )
+    res = record.get("sensor_resolution") or {}
+    if res:
+        admitted = int(res.get("locations_admitted", 0))
+        resolved = int(res.get("resolved_to_pm25_sensor", 0))
+        refused = int(res.get("refused", 0))
+        if admitted != resolved + refused:
+            raise CaptureFault(
+                f"resolution does not sum: {admitted} admitted, "
+                f"{resolved} resolved plus {refused} refused"
+            )
+        kinds = sum(int(v) for v in (res.get("refusals_by_kind") or {}).values())
+        if refused != kinds:
+            raise CaptureFault(f"refusals {refused} disagree with by-kind total {kinds}")
+    bounds_block = record.get("observed_bounds") or {}
+    station_rows_total = int((bounds_block.get("station") or {}).get("rows", 0))
+    if gate and station_rows_total != int(gate.get("retained", station_rows_total)):
+        raise CaptureFault(
+            f"station rows {station_rows_total} disagree with gate retained {gate.get('retained')}"
+        )
+
+
 def bounds(rows: list[dict[str, Any]]) -> dict[str, Any]:
     """The realized timestamp span of what actually landed, and the row count.
 
@@ -396,6 +493,27 @@ def bounds(rows: list[dict[str, Any]]) -> dict[str, Any]:
         return {"rows": 0, "min": None, "max": None}
     stamps = sorted(row["ts"] for row in rows)
     return {"rows": len(rows), "min": stamps[0], "max": stamps[-1]}
+
+
+def assert_one_row_per_station_hour(rows: list[dict[str, Any]]) -> None:
+    """(station, hour) must be unique across the capture.
+
+    That tuple is the join key for the whole measurement, and its uniqueness had
+    never been checked. A station returning two rows for one hour would silently
+    double its weight in a median over three stations, and nothing downstream
+    would notice: the count would look like coverage and the median would move.
+    """
+    seen: dict[tuple[str, str], int] = {}
+    for row in rows:
+        key = (str(row["station_id"]), str(row["ts"]))
+        seen[key] = seen.get(key, 0) + 1
+    duplicates = {k: n for k, n in seen.items() if n > 1}
+    if duplicates:
+        worst = sorted(duplicates.items(), key=lambda kv: -kv[1])[:3]
+        raise CaptureFault(
+            f"{len(duplicates)} (station, hour) pairs appear more than once; "
+            f"worst {[(f'{s}@{h}', n) for (s, h), n in worst]}"
+        )
 
 
 def assert_inside_window(rows: list[dict[str, Any]], start: datetime, end: datetime) -> None:
@@ -449,6 +567,7 @@ def build_artifact(
     gate: Counter[str] | None = None,
     resolution: dict[str, Any] | None = None,
     misaligned: dict[str, int] | None = None,
+    city_exclusions: dict[str, str] | None = None,
 ) -> dict[str, Any]:
     """The dated evidence artifact, in the form the admission artifact established."""
     voided = voided if voided is not None else []
@@ -504,6 +623,7 @@ def build_artifact(
         # many rows each contributed. Named per station and per city because the
         # confound-in-the-population risk has bitten twice: if the excluded rows
         # sit mostly in one city, the exclusion changes that city's coverage.
+        "city_exclusion_reasons": city_exclusions or {},
         "period_not_hour_aligned": {
             "rows": sum((misaligned or {}).values()),
             "by_station": dict(sorted((misaligned or {}).items())),
@@ -539,10 +659,13 @@ def build_parser(choices: tuple[str, ...]) -> argparse.ArgumentParser:
 
 def main(argv: list[str] | None = None) -> int:
     from climate_index.adapters.openaq.admission import (
+        AmbiguousSensorError,
         SensorIdentityError,
         admitted_locations,
+        brackets_window,
+        choose_pm25_sensor,
         load_artifact,
-        resolve_pm25_sensor,
+        pm25_candidates,
     )
     from climate_index.config import get_settings
 
@@ -582,12 +705,29 @@ def main(argv: list[str] | None = None) -> int:
         # is the repair; the lookup is only plumbing (ADR-0009).
         resolver = PacedClient(resolve_log, {"X-API-Key": key})
         refused: dict[str, str] = {}
+        refusal_kinds: Counter[str] = Counter()
         for location in admitted:
             payload = resolver.get(f"{base_url.rstrip('/')}/locations/{location.location_id}")
             try:
-                sensor_id = resolve_pm25_sensor(payload, location.location_id)
+                candidates = pm25_candidates(payload, location.location_id)
+                # Each candidate's own metadata, not the location's. A location
+                # stays current while any of its sensors reports, so it can
+                # bracket the window with a PM2.5 sensor that died years before.
+                covering = []
+                for candidate in candidates:
+                    meta = resolver.get(f"{base_url.rstrip('/')}/sensors/{candidate}")
+                    body = (meta.get("results") or [{}])[0]
+                    if brackets_window(body, window.start, window.end):
+                        covering.append(candidate)
+                sensor_id = choose_pm25_sensor(covering, location.location_id, candidates)
+            except AmbiguousSensorError as bad:
+                refused[str(location.location_id)] = str(bad)
+                refusal_kinds["ambiguous_multiple_covering"] += 1
+                continue
             except SensorIdentityError as bad:
                 refused[str(location.location_id)] = str(bad)
+                kind = "no_pm25_sensor" if "has no" in str(bad) else "none_covering_window"
+                refusal_kinds[kind] += 1
                 continue
             resolved.append(replace(location, pm25_sensor_id=sensor_id))
         resolution = {
@@ -595,6 +735,7 @@ def main(argv: list[str] | None = None) -> int:
             "resolved_to_pm25_sensor": len(resolved),
             "refused": len(refused),
             "refusals": dict(sorted(refused.items())),
+            "refusals_by_kind": dict(sorted(refusal_kinds.items())),
             "call_log": resolve_log.as_dict(),
         }
         if not resolved:
@@ -637,6 +778,7 @@ def main(argv: list[str] | None = None) -> int:
                 models += model_rows(payload, region, city.name, window.start, window.end)
 
         assert_inside_window(stations, window.start, window.end)
+        assert_one_row_per_station_hour(stations)
         assert_inside_window(models, window.start, window.end)
         if not stations or not models:
             raise CaptureFault(
@@ -669,7 +811,10 @@ def main(argv: list[str] | None = None) -> int:
         now=now,
         voided=void_history(args.window),
         gate=gate,
+        misaligned=misaligned,
+        city_exclusions=city_exclusion_reasons(admitted, stations, misaligned),
     )
+    assert_breakdowns_sum(record)
     EVIDENCE_DIR.mkdir(parents=True, exist_ok=True)
     path = EVIDENCE_DIR / f"{now.date().isoformat()}-{args.window}.json"
     path.write_text(json.dumps(record, indent=2, sort_keys=True) + "\n")

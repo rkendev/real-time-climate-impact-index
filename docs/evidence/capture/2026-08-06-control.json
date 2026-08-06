@@ -1,7 +1,6 @@
 {
   "admission": {
     "sensor_ids": [
-      35,
       673,
       1097,
       1102,
@@ -10,7 +9,6 @@
       1145,
       1146,
       1152,
-      1166,
       1534,
       1758,
       2933,
@@ -25,32 +23,12 @@
       10382,
       10423,
       10571,
-      14717,
-      14984,
-      14985,
-      17790,
-      19884,
-      19900,
-      19934,
-      19935,
-      20049,
-      20206,
       23534,
-      23997,
       24000,
       25033,
       25196,
       25520,
       25551,
-      26032,
-      34767,
-      35010,
-      35050,
-      36181,
-      36391,
-      36399,
-      36701,
-      39410,
       1300111,
       1300112,
       1300115,
@@ -186,23 +164,45 @@
       12234690,
       12234696,
       12234702,
+      12234708,
+      12234714,
       12234720,
       12234726,
+      12234735,
+      12234760,
       12234769,
       12234778,
+      12234787,
       12234796,
+      12235002,
       12235011,
       12235020,
+      12235029,
       12235038,
+      12235047,
+      12235083,
+      12235092,
+      12235101,
+      12235110,
+      12235133,
       12235187,
+      12235294,
+      12235303,
       12235312,
       12235321,
       12235610,
+      12235698,
+      12235707,
+      12235779,
       12235942,
+      12235951,
       12236236,
       12236251,
+      12236259,
+      12236361,
       13693885,
       13786674,
+      14258988,
       14679598,
       14730719,
       15675768,
@@ -213,7 +213,10 @@
     "sensors": 208,
     "version": "2026-08-03"
   },
-  "derived_at": "2026-08-04T20:32:26Z",
+  "city_exclusion_reasons": {
+    "Delhi": "served 6459 rows whose hourly periods are not [H, H+1); the frozen alignment cannot express them"
+  },
+  "derived_at": "2026-08-06T17:28:47Z",
   "derived_by": "scripts/capture_window.py at commit 808db9b",
   "note": "A committed, dated record of one capture. The captured rows themselves are not committed: the frozen licence rule bites on committed raw values, so this artifact carries counts, timestamps and statuses and no measured value of any kind.",
   "observed_bounds": {
@@ -279,9 +282,54 @@
     }
   },
   "period_not_hour_aligned": {
-    "by_city": {},
-    "by_station": {},
-    "rows": 0
+    "by_city": {
+      "Delhi": 6459
+    },
+    "by_station": {
+      "Delhi/10484": 163,
+      "Delhi/10486": 164,
+      "Delhi/10820": 150,
+      "Delhi/10825": 163,
+      "Delhi/10831": 163,
+      "Delhi/10900": 142,
+      "Delhi/10921": 135,
+      "Delhi/11603": 147,
+      "Delhi/17": 156,
+      "Delhi/235": 158,
+      "Delhi/301": 112,
+      "Delhi/50": 158,
+      "Delhi/5404": 164,
+      "Delhi/5570": 162,
+      "Delhi/5586": 160,
+      "Delhi/5598": 162,
+      "Delhi/5610": 152,
+      "Delhi/5616": 164,
+      "Delhi/5626": 163,
+      "Delhi/5627": 164,
+      "Delhi/5630": 148,
+      "Delhi/5634": 164,
+      "Delhi/5650": 159,
+      "Delhi/6356": 163,
+      "Delhi/6358": 126,
+      "Delhi/6359": 156,
+      "Delhi/6924": 162,
+      "Delhi/6929": 136,
+      "Delhi/6931": 156,
+      "Delhi/6932": 158,
+      "Delhi/6934": 158,
+      "Delhi/6938": 162,
+      "Delhi/6957": 163,
+      "Delhi/6960": 161,
+      "Delhi/6980": 132,
+      "Delhi/6988": 163,
+      "Delhi/8118": 166,
+      "Delhi/8235": 156,
+      "Delhi/8365": 164,
+      "Delhi/8472": 95,
+      "Delhi/8475": 146,
+      "Delhi/8917": 163
+    },
+    "rows": 6459
   },
   "run": {
     "model": {
@@ -296,15 +344,15 @@
       "calls": 208,
       "rate_limit_at_end": {
         "x-ratelimit-limit": "60",
-        "x-ratelimit-remaining": "51",
-        "x-ratelimit-reset": "48",
-        "x-ratelimit-used": "9"
+        "x-ratelimit-remaining": "39",
+        "x-ratelimit-reset": "27",
+        "x-ratelimit-used": "21"
       },
       "rate_limit_at_start": {
         "x-ratelimit-limit": "60",
-        "x-ratelimit-remaining": "20",
-        "x-ratelimit-reset": "9",
-        "x-ratelimit-used": "40"
+        "x-ratelimit-remaining": "30",
+        "x-ratelimit-reset": "20",
+        "x-ratelimit-used": "30"
       },
       "rate_limited": false,
       "statuses": {
@@ -315,12 +363,12 @@
   "schema": "window-capture/1",
   "sensor_resolution": {
     "call_log": {
-      "calls": 208,
+      "calls": 450,
       "rate_limit_at_end": {
         "x-ratelimit-limit": "60",
-        "x-ratelimit-remaining": "21",
-        "x-ratelimit-reset": "9",
-        "x-ratelimit-used": "39"
+        "x-ratelimit-remaining": "31",
+        "x-ratelimit-reset": "20",
+        "x-ratelimit-used": "29"
       },
       "rate_limit_at_start": {
         "x-ratelimit-limit": "60",
@@ -330,19 +378,20 @@
       },
       "rate_limited": false,
       "statuses": {
-        "200": 208
+        "200": 450
       }
     },
     "locations_admitted": 208,
     "refusals": {},
+    "refusals_by_kind": {},
     "refused": 0,
     "resolved_to_pm25_sensor": 208
   },
   "station_source": "OpenAQ /v3/sensors/{id}/hours, the provider's own hourly value for the half-open hour, per section 5. Not the S3 archive: the archive carries raw instants, so using it would compute every hourly value locally and make every station a computed mean, destroying the construction breakdown the contract requires as a reported output.",
   "validity_gate": {
-    "period_not_hour_aligned": 3139,
+    "period_not_hour_aligned": 6459,
     "retained": 24409,
-    "returned": 27548
+    "returned": 30868
   },
   "voided_attempts": [
     {

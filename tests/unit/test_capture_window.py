@@ -52,8 +52,13 @@ def _stamp(moment: datetime) -> str:
 
 
 def _hour(text: str, value: float, *, flags: bool = False, observed: int = 1) -> dict[str, object]:
+    """A well-formed hourly row: anchored on ``text`` and exactly one hour long."""
+    start = datetime.fromisoformat(text.replace("Z", "+00:00"))
     return {
-        "period": {"datetimeFrom": {"utc": text}},
+        "period": {
+            "datetimeFrom": {"utc": text},
+            "datetimeTo": {"utc": _stamp(start + timedelta(hours=1))},
+        },
         "value": value,
         "hasFlags": flags,
         "coverage": {"observedCount": observed},
@@ -478,3 +483,189 @@ def test_off_hour_counts_fold_to_cities_so_a_concentration_is_visible() -> None:
         "Delhi": 1,
         "Madrid": 5,
     }
+
+
+def test_a_period_starting_on_the_hour_but_not_one_hour_long_is_rejected() -> None:
+    """[23:00, 00:30) starts on the hour and is still not [H, H+1).
+
+    Counted under its own reason, not folded into the anchor one, so the two
+    failure shapes stay distinguishable in the report. An anchor-only check would
+    pass this, and only three sensors of roughly two hundred had ever been looked
+    at directly.
+    """
+    from collections import Counter
+
+    from capture_window import station_rows
+
+    entry = _hour(_stamp(INSIDE), 12.5)
+    entry["period"]["datetimeTo"] = {"utc": _stamp(INSIDE + timedelta(minutes=90))}
+    gate: Counter[str] = Counter()
+    assert station_rows({"results": [entry]}, SENSOR, gate, {}) == []
+    assert gate["period_not_one_hour_long"] == 1
+    assert gate["period_not_hour_aligned"] == 0
+
+
+def test_a_well_formed_hour_carries_its_end_and_is_kept() -> None:
+    """The no-fault control: a check that rejects everything proves nothing."""
+    from collections import Counter
+
+    from capture_window import station_rows
+
+    gate: Counter[str] = Counter()
+    rows = station_rows({"results": [_hour(_stamp(INSIDE), 12.5)]}, SENSOR, gate, {})
+    assert len(rows) == 1
+    assert gate["period_not_one_hour_long"] == 0
+
+
+def test_two_rows_for_one_station_hour_block_the_capture() -> None:
+    """The join key for the whole measurement, never checked until now.
+
+    A station returning two rows for one hour doubles its weight in a median over
+    three stations, and the count would look like coverage.
+    """
+    from capture_window import assert_one_row_per_station_hour
+
+    rows = [
+        {"station_id": "s-11", "ts": _stamp(INSIDE)},
+        {"station_id": "s-11", "ts": _stamp(INSIDE)},
+        {"station_id": "s-12", "ts": _stamp(INSIDE)},
+    ]
+    with pytest.raises(CaptureFault, match="appear more than once"):
+        assert_one_row_per_station_hour(rows)
+
+
+def test_distinct_station_hours_pass_the_uniqueness_check() -> None:
+    from capture_window import assert_one_row_per_station_hour
+
+    assert_one_row_per_station_hour(
+        [
+            {"station_id": "s-11", "ts": _stamp(INSIDE)},
+            {"station_id": "s-11", "ts": _stamp(LATER)},
+            {"station_id": "s-12", "ts": _stamp(INSIDE)},
+        ]
+    )
+
+
+# --- every breakdown must sum to its total ------------------------------------
+
+
+def test_a_breakdown_that_does_not_sum_blocks_the_capture() -> None:
+    """The defect that produced 0 beside a gate total of 3139, made a test.
+
+    A breakdown reading zero with no total beside it is invisible. This is the
+    check that makes it loud, and it exists because the invisible version already
+    happened and was read as "no concentration" rather than "not recorded".
+    """
+    from capture_window import assert_breakdowns_sum
+
+    record = {
+        "validity_gate": {"returned": 100, "retained": 90, "period_not_hour_aligned": 10},
+        "period_not_hour_aligned": {"rows": 0, "by_station": {}, "by_city": {}},
+    }
+    with pytest.raises(CaptureFault, match="off-hour breakdown does not sum|disagree"):
+        assert_breakdowns_sum(record)
+
+
+def test_a_consistent_record_passes_the_sum_check() -> None:
+    """The no-fault control. A check that rejects everything proves nothing."""
+    from capture_window import assert_breakdowns_sum
+
+    assert_breakdowns_sum(
+        {
+            "validity_gate": {"returned": 100, "retained": 90, "period_not_hour_aligned": 10},
+            "period_not_hour_aligned": {
+                "rows": 10,
+                "by_station": {"Delhi/a": 6, "Delhi/b": 4},
+                "by_city": {"Delhi": 10},
+            },
+            "sensor_resolution": {
+                "locations_admitted": 5,
+                "resolved_to_pm25_sensor": 3,
+                "refused": 2,
+                "refusals_by_kind": {"no_pm25_sensor": 1, "none_covering_window": 1},
+            },
+            "observed_bounds": {"station": {"rows": 90}},
+        }
+    )
+
+
+def test_the_gate_total_must_equal_retained_plus_every_reason() -> None:
+    from capture_window import assert_breakdowns_sum
+
+    with pytest.raises(CaptureFault, match="gate breakdown does not sum"):
+        assert_breakdowns_sum({"validity_gate": {"returned": 100, "retained": 80, "flags": 10}})
+
+
+def test_refusals_must_equal_their_by_kind_total() -> None:
+    from capture_window import assert_breakdowns_sum
+
+    with pytest.raises(CaptureFault, match="disagree with by-kind total"):
+        assert_breakdowns_sum(
+            {
+                "sensor_resolution": {
+                    "locations_admitted": 3,
+                    "resolved_to_pm25_sensor": 1,
+                    "refused": 2,
+                    "refusals_by_kind": {"no_pm25_sensor": 1},
+                }
+            }
+        )
+
+
+# --- a city excluded by alignment is not a city that is absent -----------------
+
+
+def test_alignment_exclusion_and_absence_are_recorded_as_different_facts() -> None:
+    """Delhi and Lagos both end UNCHECKED and are not the same fact."""
+    from dataclasses import dataclass
+
+    from capture_window import city_exclusion_reasons
+
+    @dataclass
+    class Loc:
+        city: str
+
+    admitted = [Loc("Delhi"), Loc("Lagos"), Loc("Madrid")]
+    retained = [{"city": "Madrid"}]
+    reasons = city_exclusion_reasons(admitted, retained, {"Delhi/a": 2037})
+    assert "Madrid" not in reasons
+    assert "cannot express" in reasons["Delhi"]
+    assert "no admitted location served" in reasons["Lagos"]
+    assert reasons["Delhi"] != reasons["Lagos"]
+
+
+# --- the resolver: exactly one covering candidate, or a named refusal ----------
+
+
+def test_exactly_one_covering_candidate_is_taken() -> None:
+    from climate_index.adapters.openaq.admission import choose_pm25_sensor
+
+    assert choose_pm25_sensor([12234796], 50, [396, 12234796]) == 12234796
+
+
+def test_no_covering_candidate_is_refused_not_guessed() -> None:
+    from climate_index.adapters.openaq.admission import SensorIdentityError, choose_pm25_sensor
+
+    with pytest.raises(SensorIdentityError, match="none covering the capture window"):
+        choose_pm25_sensor([], 50, [396])
+
+
+def test_two_covering_candidates_are_refused_as_ambiguous() -> None:
+    """Not a tie to be broken by list order. A question the capture cannot answer."""
+    from climate_index.adapters.openaq.admission import AmbiguousSensorError, choose_pm25_sensor
+
+    with pytest.raises(AmbiguousSensorError, match="refusing to choose"):
+        choose_pm25_sensor([1, 2], 50, [1, 2])
+
+
+def test_the_bracket_rule_reads_the_sensors_own_dates() -> None:
+    from climate_index.adapters.openaq.admission import brackets_window
+
+    live = {"datetimeFirst": {"utc": "2025-01-01T00:00:00Z"}, "datetimeLast": {"utc": _stamp(END)}}
+    dead = {
+        "datetimeFirst": {"utc": "2016-02-05T14:55:00Z"},
+        "datetimeLast": {"utc": "2018-02-21T21:15:00Z"},
+    }
+    assert brackets_window(live, START, END)
+    assert not brackets_window(dead, START, END)
+    assert not brackets_window({}, START, END)

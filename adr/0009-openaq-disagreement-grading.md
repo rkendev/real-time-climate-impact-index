@@ -1964,6 +1964,162 @@ trying again.
 Spent so far: 0 reconciliation runs of the 1 remaining. Capture voids: 2, both
 diagnosed.
 
+## Capture attempt 4: the clean capture, and everything re-derived from it
+
+Recorded 2026-08-06. Nothing in this section is carried across the void boundary;
+every figure is re-derived from the capture at
+`docs/evidence/capture/2026-08-06-control.json`. No comparison has been computed.
+
+**Resolution.** 208 locations admitted, 208 resolved to a PM2.5 sensor, 0 refused.
+The prediction that the new bracket rule would refuse some locations was wrong:
+once dead sensors are excluded, each location has exactly one PM2.5 sensor
+covering the window, so neither `none_covering_window` nor
+`ambiguous_multiple_covering` fired.
+
+**Gate.** 30868 rows returned, 24409 retained, 6459 rejected as
+`period_not_hour_aligned`, and the per-city fold is `{"Delhi": 6459}`. The
+exclusion is not spread across cities: **every excluded row is Delhi and no other
+city loses one**. `hasFlags` and `observedCount` removed nothing, so the
+contract's pre-committed question about whether the frozen validity gate is inert
+over this population is answered by count rather than by inference: it never
+fired.
+
+**Uniqueness.** 24409 station-hours, 0 duplicated. **Bounds.** Both sources
+`2026-07-17T00:00:00Z` to `2026-07-23T23:00:00Z`, an hour clear of the boundary.
+
+| city | stations | rows | hours | median | min | max | qualifying |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| Amsterdam | 5 | 749 | 156 | 5.60 | 0.3 | 173.0 | 156 |
+| Berlin | 7 | 965 | 138 | 8.03 | 2.3 | 24.9 | 138 |
+| Chicago | 8 | 1342 | 168 | 16.45 | 1.8 | 538.0 | 168 |
+| Los Angeles | 6 | 904 | 168 | 11.10 | -1.0 | 31.0 | 168 |
+| Madrid | 6 | 401 | 69 | 11.00 | -1.0 | 37.0 | 68 |
+| New York | 15 | 2430 | 168 | 8.90 | -9.1 | 177.0 | 168 |
+| Tokyo | 119 | 17618 | 154 | 11.00 | 0.0 | 253.0 | 154 |
+| **total** | | | | | | | **1020** |
+
+Every median is a plausible urban PM2.5 concentration. Nothing reads like ozone.
+
+## A national monitoring network the frozen alignment cannot express
+
+Recorded before the reconciliation run, as a finding rather than as attrition.
+
+Delhi is excluded from the measurement. Its 42 admitted locations resolve to live
+PM2.5 sensors that serve the control week and a recent week through
+`/v3/sensors/{id}/hours`, the endpoint the contract names. Their hourly periods
+are anchored at `:30`.
+
+**The mechanism, plainly.** `[23:30, 00:30)` is not `[H, H+1)` for any integer
+`H`. The model side has values only on the hour. There is therefore nothing to
+pair a `:30`-anchored station hour with, and the frozen alignment defines no
+comparison for it.
+
+**This is not a defect in CPCB and not a defect in the rule.** It is a mismatch
+between two conventions, and it is visible only because one of them was frozen in
+advance and applied without adjustment. A European regulatory alignment convention
+cannot express an entire national monitoring network's hourly data. That is a
+stronger and more transferable result than any flag rate this project will
+produce, and it is the temporal sibling of the tolerance behaving differently at
+Delhi's concentrations than at Madrid's: the same frozen document meeting the same
+country and failing to fit it, once on the value axis and once on the time axis.
+
+**Recorded at city level, because the state machine cannot hold the distinction.**
+Delhi and Lagos both end UNCHECKED and they are not the same fact. Lagos has no
+reference-grade PM2.5 station. Delhi has forty-two locations serving data whose
+periods the contract cannot express. The capture artifact now carries
+`city_exclusion_reasons` distinguishing the two, because a reader who sees only
+UNCHECKED learns the wrong thing about Delhi.
+
+**The exclusion improves a required breakdown, and that is a consequence and not a
+reason.** Removing Delhi leaves the per-domain breakdown as CAMS Europe with three
+cities and 362 qualifying city-windows against CAMS global with four cities and
+658. The confound recorded before the void run, when the faulty capture left
+Madrid as the only European city, was total: the 11 km arm was one city. It is now
+a real if uneven comparison, and the paragraph recording it as total confounding
+is superseded rather than restated. **Stated in these words because an improvement
+that arrives unremarked is what an auditor looks for**, and it is the same
+disclosure the contract made about beta = 2 also being the choice more likely to
+land inside the band. Delhi is excluded because the alignment rule says so. That
+the exclusion happens to strengthen a required output is a fact about the
+consequence, not a reason for the decision, and the decision was taken and
+recorded before this breakdown was computed.
+
+## Defect seven: admission is stricter than the rule it implements
+
+Recorded 2026-08-06.
+
+**What was checked, and what it was not.** The question asked was whether
+admission bracketed on the location or on the sensor. It bracketed on the
+**sensor**, as the contract requires:
+`scripts/recompute_station_admission.py` queries `/v3/locations/{id}/sensors` and
+reads each sensor's own `datetimeFirst` and `datetimeLast`. **There is no defect
+of the kind that was hypothesised**, and the conditional is recorded as not firing
+rather than quietly dropped.
+
+**The defect that is there.** The loop examines the **first** PM2.5 sensor at each
+location and then `break`s unconditionally. A location whose first-listed PM2.5
+sensor does not bracket the window is rejected even when a second one does. The
+frozen rule admits a station when its PM2.5 sensor brackets the window; the code
+admits it when its *first-listed* PM2.5 sensor does. **The code is stricter than
+the frozen rule**, and it is the first defect found in code implementing a frozen
+rule rather than in the contract itself.
+
+**Ordering is not stable over time.** Location 50 carries two PM2.5 sensors, one
+dead since 2018. On 2026-08-04 a probe listed the dead one first; on 2026-08-06
+six consecutive calls list the live one first. Claimed narrowly: variation
+observed on `/v3/locations/{id}` between two probes two days apart, and nothing
+established either way about `/v3/locations/{id}/sensors`. It is enough to make
+"take the first match" unsafe, which is why the repaired resolver refuses to
+choose rather than picking.
+
+**The repair is required in principle and is not available.** By the
+validity-repair principle a change moving **code** toward what was **frozen** is
+required, and a change moving the **declaration** toward a wanted result is
+forbidden. This is the first kind. That fixing it would **enlarge** the population
+and help D2's precondition is not a reason either way; that is what "never on
+effect" means, and it is the identical reasoning applied to the resolver
+tightening, which **reduced** the population and made the precondition **harder**
+to clear. If the direction of the effect could argue for one repair it could argue
+against the other.
+
+It is unavailable because one reconciliation run remains, and a corrected admitted
+set requires a new artifact, a new capture and a new run. **The budget is the
+reason the defect is unfixed. It is not the reason the defect is acceptable.** The
+measurement is taken over a population that under-counts the frozen rule's
+admissible set.
+
+**The shortfall is measured, not carried as an unknown.** All 80 non-admitted
+locations with a PM2.5 sensor were queried: those with a second PM2.5 sensor whose
+own dates bracket the window while the first does not. Metadata only, no
+comparison.
+
+| city | candidates examined | recovered by a later sensor |
+| --- | ---: | ---: |
+| Delhi | 39 | **6** |
+| Tokyo | 9 | 0 |
+| Nairobi | 9 | 0 |
+| Jakarta | 7 | 0 |
+| Los Angeles | 6 | 0 |
+| New York | 4 | 0 |
+| Berlin, Chicago | 2 each | 0 |
+| Lagos, Cairo | 1 each | 0 |
+| Amsterdam, Madrid | 0 | 0 |
+| **total** | **80** | **6** |
+
+**Six locations, all of them in Delhi.** The under-count is bounded at six, and
+because Delhi is excluded from the measurement by the alignment rule regardless,
+those six would have contributed nothing. **The defect is real, measured, and
+inert for this measurement.** That is a materially different statement from "an
+under-count by an unknown amount", and it is the fourth exclusion in this project
+to turn out concentrated in a single city rather than spread.
+
+**Two dated artifacts that disagree, with the reason written.** The pinned
+admission artifact stays exactly as it is, the dated record of what admission
+produced on 2026-08-03. The capture artifact records what resolved under the
+frozen rule. Neither is corrected into agreement with the other, because a
+quietly reconciled pair of records is worth less than a disagreeing pair whose
+reason is written down.
+
 ## Post-project findings, recorded and not built
 
 Things worth fixing that this project will not fix. Section 2 of the contract
