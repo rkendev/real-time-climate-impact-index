@@ -49,6 +49,13 @@ warn_required_dynamic_aliases = true
 [tool.pytest.ini_options]
 # deploy/vps carries the live demo's feeder and publisher, which are operator
 # tooling like scripts/: importable by tests, deliberately not part of the package.
-pythonpath = ["src", "scripts", "deploy/vps"]
+# "." is load-bearing and is not tidying. Four test modules import shared
+# fixtures across directories (`from tests.unit import openaq_fixtures`), which
+# needs the repository root importable. `python -m pytest` puts the working
+# directory on sys.path and the `pytest` console script does not, so the suite
+# collected 447 under one invocation and 402-with-4-errors under the other. CI
+# runs `make test`, which uses the console script. See ADR-0009, the ninth way a
+# gate lies.
+pythonpath = [".", "src", "scripts", "deploy/vps"]
 testpaths = ["tests"]
 addopts = "-ra"

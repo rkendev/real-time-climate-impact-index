@@ -2683,6 +2683,15 @@ describe it. The radius is measured from the grid point the provider returns.
 Recorded 2026-08-06. Every number here is quoted from the single evaluated holdout
 run and its verification output. Nothing is recomputed for this record.
 
+> **Annotation added 2026-08-07, after the fact and left in place rather than
+> edited away.** Every gate this section and its commit messages report as green
+> was a **local** gate, run as `python -m pytest`. Continuous integration runs
+> `make test`, which uses the `pytest` console script, and under that invocation
+> the suite did not run at all: it aborted during collection. CI was red for this
+> commit and for every commit in T3a, T3b and T3c. See "The ninth way a gate
+> lies" at the end of this record. The measurement stands; its third-party
+> checkability did not.
+
 ### 1. The headline, in the order settled before a number existed
 
 **AFR is monitored by instruments this threshold cannot use.** Not unmonitored.
@@ -2941,3 +2950,121 @@ measured here.
 
 The advisor errors in §4.5 and in this ADR stay where they are. The record is not
 tidied. Its value is that its corrections are real.
+
+
+## The ninth way a gate lies: it went red in public and nobody read it
+
+Recorded 2026-08-07, after v2.2.0 shipped.
+
+Section 6 of the contract names three ways a gate lies: one that cannot go red,
+one satisfiable by construction, and one reading green over an empty witness set.
+This is a fourth mode by that enumeration and the ninth by the fuller one, which
+does not live in this repository. **A gate does not need to be unprovable or
+vacuous to be worthless. It can be correct, run automatically, publish its verdict
+on the most public surface the project has, go red, and be worthless because
+nobody read it.**
+
+### The dating, and it is worse than it looked
+
+**Last green: run #30, commit `851febe`, 2026-08-03 18:56.** **First red: run #31,
+commit `901cda9`, 2026-08-03 19:16**, the commit that added the OpenAQ station
+adapter. Twenty-one consecutive runs were red, not five, and the breakage predates
+4 August.
+
+That span includes **run #34, commit `c359dd4`, "Close T2"**. **T2 was closed on
+red.** T1's closes are in runs #22 to #30 and are green, so T1 is clear. Runs #47
+and #48 are `cancelled` rather than failed: the workflow sets
+`concurrency: cancel-in-progress`, and each was superseded by the next push.
+
+**The README carries a CI status badge on line 3**, the second line of the page.
+For four days the release badge sat directly above a badge reporting failure, on
+the most public surface this project has, through the control run, the opening of
+the holdout, the evaluation, the close-out and the v2.2.0 release. **It was
+visible the entire time and it was not read.**
+
+### The cause, and the hypothesis it falsified
+
+The obvious hypothesis, given that this repository has twice been bitten by
+untracked files, was an untracked `__init__.py` or root `conftest.py` present
+locally and absent in CI. **That is falsified**: no `__init__.py` exists anywhere
+under `tests/`, tracked or untracked, and there is no root `conftest.py`.
+
+The cause is the **invocation**, not the tree:
+
+```
+make test                     ->  4 errors, 402 collected, exit 2   (CI runs this)
+.venv/bin/pytest              ->  4 errors, 402 collected
+.venv/bin/python -m pytest    ->  447 collected                     (what was run all session)
+```
+
+`python -m pytest` places the working directory at `sys.path[0]`; the `pytest`
+console script does not. Four test modules import shared fixtures across
+directories, `from tests.unit import openaq_fixtures` and
+`from tests.integration import at13_fixtures`, which requires the repository root
+to be importable. Confirmed by `sys.path[0]` being `''` under `-m`, and by a clean
+clone of the released commit `830bb9b` into a fresh virtual environment
+reproducing 402-collected-with-4-errors exactly.
+
+**`make test` was never run once during T3a, T3b or T3c.** Every gate report in
+those sessions used `python -m pytest`. That is the whole hole.
+
+### What never ran, and it is not a random 45
+
+Four modules failed to collect, so roughly 45 tests never executed in CI:
+
+| module | what it carries |
+| --- | --- |
+| `tests/hygiene/test_fixture_provenance.py` | **the licence control**, the artifact-attached guard added after real CPCB readings were committed under unstated terms |
+| `tests/integration/test_at13_reconciliation.py` | **AT-13**, the only new acceptance test, with its fixture-adequacy companion |
+| `tests/unit/test_seeded_dq3_resolution.py` | **the NFR-DQ3 seeded violation**, the proof that the reported-never-resolved guard can fail |
+| `tests/unit/test_openaq_source.py` | the station adapter's contract, including the parameter and units assertions |
+
+**The modules that failed to collect are disproportionately the ones carrying the
+claims.** Not a coincidence: they are exactly the modules that needed shared
+fixture data, and needing shared fixture data is what made them import across
+directories in the first place. The guards proving the guards were the ones that
+did not run.
+
+### What stands and what does not
+
+**The measurement stands.** The numbers were produced by code that did run, under
+an interpreter that imported it. A collection failure in a second environment does
+not retroactively change what executed in the first. D1, D2 and D3 are unaffected,
+and the holdout evaluation is not re-run.
+
+**The verifiability did not stand, and that is the real damage.** For a project
+whose entire value is that a third party can check it, "the guards are proven red"
+was only ever checkable on one machine. Someone cloning the repository and running
+`make test` between 3 August and this fix would have seen the suite abort, and
+would have been unable to verify a single one of the seeded-violation proofs the
+claims rest on. That is a genuine hole in what was shipped, not a footnote to a
+fix.
+
+**The frozen contract is untouched.** Nothing here moves a predicate, a constant, a
+band or a floor.
+
+### The repair
+
+`pythonpath` in `[tool.pytest.ini_options]` gains `"."`, so the repository root is
+importable under both invocations. Permitted by the direction-of-effect test: it
+moves the **artifact** toward the standard and leaves the **standard** untouched.
+The standard is what it always was, that the suite passes; what changed is that it
+now passes where it is checked rather than only where it was written.
+
+Proven the only way this can be proven: **a green CI run on a pushed commit.**
+A clean clone into a fresh virtual environment, run with CI's own invocation, is
+corroboration and not proof, because that is precisely the class of evidence that
+failed here.
+
+### The lesson, in the form that generalises
+
+Every earlier gate failure in this project was a gate that could not fail, or that
+watched the wrong thing, or that passed over nothing. This one worked perfectly.
+It ran on every push, evaluated the right thing, reached the right verdict, and
+published it on the front page of the repository.
+
+**A gate's value is bounded by whether its verdict reaches a decision.** Twenty-one
+red runs produced no decision because no step in any session read them, and the
+local suite was reported instead. The failure was not in the gate and not in the
+tests; it was that the human-facing loop closed on the wrong signal, and the wrong
+signal was the one that was convenient to run.
