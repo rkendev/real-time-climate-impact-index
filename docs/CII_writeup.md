@@ -1,5 +1,31 @@
 # I pointed my pipeline at a dead host, and it downgraded itself
 
+> **Scope.** This piece is an account of one experiment, the dead-host run of 22
+> July 2026, and of the project as it stood at v2.1.0. It is left as written.
+>
+> The project was **reopened afterwards** under a pre-registered contract, to ask
+> a question the dead-host run could not: not what happens when evidence
+> disappears, but what happens when two sources are both present and disagree.
+>
+> What the reopen found, in the order the record settles on. **AFR is monitored by
+> instruments the chosen threshold cannot use**, so one of the four regions carries
+> the lower provenance tier permanently: Lagos has sixty-one fixed stations inside
+> the radius and one that is reference grade, and none of the three cities admits a
+> single station. **A European regulatory convention failed to fit the population it
+> was pointed at in two independent ways**, once on the time axis, where an entire
+> national network's hourly periods are anchored off the hour and cannot be
+> expressed by the frozen alignment rule, and once on the value axis, where at the
+> median hour in three of seven cities a model reporting zero would still pass the
+> criterion. **Then the measurement: the two sources disagreed in 237 of 1,038
+> comparable city-hours, 22.8 percent.**
+>
+> The pre-registered contract, the three verdicts, seven contract defects
+> including one withdrawn, an apparatus fault that was caught before the sealed
+> data was opened, and two diagnosed capture voids are all recorded in
+> [`adr/0009-openaq-disagreement-grading.md`](../adr/0009-openaq-disagreement-grading.md)
+> and in [`PREREGISTRATION.md`](../PREREGISTRATION.md). The limits are stated
+> above the number in the [README](../README.md).
+
 Most streaming demos show a number moving on a chart and ask you to trust it. I built the opposite: a pipeline where every number carries a confidence grade computed from how much clean evidence actually backed it. The only real test of a grade like that is what happens when the evidence disappears for real.
 
 So on 22 July I pointed the pipeline's air quality endpoint at a hostname that does not exist and ran a full tick against the live weather source.
