@@ -50,6 +50,14 @@ jobs:
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # Full history, because a hygiene control asserts that
+          # PREREGISTRATION.md has exactly one commit and that it is the frozen
+          # one. Under the default shallow fetch that command reports the single
+          # fetched commit instead, so the gate accused the contract of having
+          # been edited when it had not. This moves the environment to where the
+          # property can be observed; it changes neither the test nor the file.
+          fetch-depth: 0
 
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:

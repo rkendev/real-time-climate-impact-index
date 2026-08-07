@@ -31,8 +31,6 @@ import subprocess
 from datetime import UTC, datetime
 from pathlib import Path
 
-import pytest
-
 from climate_index.config import Settings
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -105,7 +103,36 @@ def test_the_contract_is_still_frozen() -> None:
 
     ADR-0009 and the specification both assert this in prose. Asserting it here
     means the assertion survives a later edit rather than describing one.
+
+    This test distinguishes three outcomes rather than two: the freeze holds, the
+    freeze is broken, or **the freeze cannot be observed from this checkout**. The
+    third fails loudly with a message saying so, because reporting it as either of
+    the first two would be a false statement about evidence.
     """
+    # A shallow clone cannot answer this question, and the danger is that it
+    # answers it wrongly. `git log -- PREREGISTRATION.md` in a depth-1 checkout
+    # reports the single fetched commit as the file's only commit, so this gate
+    # once reported "the contract has been edited" when the contract had not been
+    # touched. A gate that reds for a reason other than the property it guards is
+    # not a working gate, and a signal that reds for the wrong reason is a signal
+    # people stop reading, which is exactly how twenty-one runs went unread.
+    shallow = subprocess.run(
+        ["git", "rev-parse", "--is-shallow-repository"],
+        cwd=REPO_ROOT,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert shallow.returncode == 0, (
+        "not a git checkout, so the freeze cannot be verified. Failing rather "
+        "than skipping: a control that goes quiet exactly when it cannot check "
+        "is the mode that cannot go red."
+    )
+    assert shallow.stdout.strip() == "false", (
+        "shallow clone: the freeze cannot be verified here, and this gate will "
+        "not guess. It is not a claim that the contract moved. Fetch full "
+        "history (actions/checkout with fetch-depth: 0) to verify it."
+    )
     result = subprocess.run(
         ["git", "log", "--format=%H", "--", "PREREGISTRATION.md"],
         cwd=REPO_ROOT,
@@ -113,8 +140,7 @@ def test_the_contract_is_still_frozen() -> None:
         text=True,
         check=False,
     )
-    if result.returncode != 0:
-        pytest.skip("not a git checkout; the freeze cannot be verified here")
+    assert result.returncode == 0, "git log failed; the freeze cannot be verified"
     commits = result.stdout.split()
     assert len(commits) == 1, f"the contract has been edited: {len(commits)} commits"
     assert commits[0].startswith(FROZEN_AT), f"frozen at {commits[0]}, not {FROZEN_AT}"

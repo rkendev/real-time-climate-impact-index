@@ -3008,9 +3008,16 @@ reproducing 402-collected-with-4-errors exactly.
 **`make test` was never run once during T3a, T3b or T3c.** Every gate report in
 those sessions used `python -m pytest`. That is the whole hole.
 
-### What never ran, and it is not a random 45
+### What never ran: all of it
 
-Four modules failed to collect, so roughly 45 tests never executed in CI:
+**Corrected 2026-08-07, and the first version of this section understated it.** It
+said roughly 45 tests never executed in CI. That is wrong. Run #51's log reads
+`collected 402 items / 4 errors`, then `Interrupted: 4 errors during collection`,
+then `4 errors in 1.37s`, **with no test-results line at all**. Collection aborts
+the session. **Zero tests ran in CI across twenty-one runs.** The other 402 did not
+run either.
+
+Four modules failed to *collect*, and they are the reason the session aborted:
 
 | module | what it carries |
 | --- | --- |
@@ -3022,8 +3029,12 @@ Four modules failed to collect, so roughly 45 tests never executed in CI:
 **The modules that failed to collect are disproportionately the ones carrying the
 claims.** Not a coincidence: they are exactly the modules that needed shared
 fixture data, and needing shared fixture data is what made them import across
-directories in the first place. The guards proving the guards were the ones that
-did not run.
+directories in the first place.
+
+But the sharper statement is that it did not matter which four they were.
+Collection is all-or-nothing, so **every test in the suite failed to run, including
+the ones that collected cleanly**. The four modules explain why the session
+aborted; they do not bound the damage.
 
 ### What stands and what does not
 
@@ -3068,3 +3079,80 @@ red runs produced no decision because no step in any session read them, and the
 local suite was reported instead. The failure was not in the gate and not in the
 tests; it was that the human-facing loop closed on the wrong signal, and the wrong
 signal was the one that was convenient to run.
+
+
+## The freeze pin's first execution outside one machine was a failure
+
+Recorded 2026-08-07, appended to the section above rather than folded into it,
+because it is a second finding and not a detail of the first.
+
+Fixing the import error let CI collect all 447 tests for the first time. **The run
+was still red**, and the failing test was the freeze pin:
+
+```
+FAILED tests/hygiene/test_settings_match_contract.py::test_the_contract_is_still_frozen
+AssertionError: frozen at 75280dc519cf514b430030ad9f6965694658db26, not b81f1c9
+```
+
+**The contract had not been edited.** GitHub Actions checks out at depth 1 by
+default, and in a shallow clone `git log -- PREREGISTRATION.md` reports the single
+fetched commit as the file's only commit. On full history the same command still
+returns exactly `b81f1c97ae1a7e69918d918d5636318f57aee791`, dated 2026-08-02, which
+is what was verified after the holdout number was seen and what remains true.
+
+**A correction to the first account of this.** It was said that the freeze pin was
+"inside one of the four modules that failed to collect". That is false;
+`test_settings_match_contract.py` was never one of the four. The true statement is
+simpler and worse: **the freeze pin never executed in CI once**, because collection
+aborted before anything ran, and its first execution anywhere outside one machine
+is this failure.
+
+That matters because the freeze pin is the mechanical evidence that no predicate
+moved, cited in the close-out and in the v2.2.0 release notes as checkable rather
+than asserted. It was checkable. It had never been checked anywhere but here.
+
+### The repair, and the second defect it exposed
+
+`fetch-depth: 0` on the checkout. Permitted by the direction-of-effect test: it
+moves the **environment** to where the property can be observed and touches neither
+the standard nor the artifact.
+
+The test itself had a worse defect than the workflow did. **In a shallow clone it
+reported "the contract has been edited". The contract had not been edited.** A gate
+that goes red for a reason other than the property it guards is not a working gate,
+and it is a direct cause of the mode recorded above: a signal that reds for the
+wrong reason is a signal people stop reading, and twenty-one unread runs is what
+that looks like at the end.
+
+So the test now distinguishes three outcomes rather than two. The freeze holds; the
+freeze is broken; or **the freeze cannot be observed from this checkout**, detected
+explicitly with `git rev-parse --is-shallow-repository` and **failed**, not skipped,
+with a message saying what could and could not be seen. Failing is not a relaxation:
+it still reds, and it replaces a false accusation with a true report.
+
+The same function's `pytest.skip("not a git checkout")` was the identical defect in
+its passive form. **A hygiene control that goes quiet exactly when it cannot check
+is the mode that cannot go red**, which this project has been writing about since
+T2. It is now a failure as well. If a legitimate environment surfaces where that is
+wrong, it will surface loudly, which is the point.
+
+### The bounded audit, so a fourth is not discovered after the fact
+
+Three environment-shaped holes in two days, all the same family: what was verified
+here is not what a third party runs. Every module under `tests/hygiene/` was checked
+against whether its verdict depends on git history depth, untracked files, file
+mtimes, the working directory, or the pytest invocation.
+
+**One depends on history depth**, the freeze pin, now fixed. The three `git ls-files`
+controls, house style, demo env and tfvars, read the **index** rather than history,
+so a shallow clone does not affect them, which is why they stayed green while the
+freeze pin could not. None depends on mtimes. None depends on the working directory;
+all resolve from `Path(__file__)` or pass `cwd=REPO_ROOT`. `test_fixture_provenance.py`
+depended on the invocation and is fixed by the `pythonpath` entry.
+
+**One residual is reported and deliberately not fixed.** `test_precommit_gate.py`
+still skips when the `pre-commit` binary is absent, which is the same passive shape
+corrected in the freeze pin. It is not fixed because CI installs that binary in
+`make bootstrap`, so it does not skip there, and the audit's remit was to repair what
+is broken in CI rather than to refactor what is not. Recorded so the decision is
+visible rather than inherited.
