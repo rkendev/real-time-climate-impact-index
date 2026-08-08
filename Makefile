@@ -10,7 +10,7 @@ export PYTHONPATH := src
 	tf-fmt tf-validate tf-plan teardown-audit pre-deploy-gate container-smoke \
 	image-build image-push verify-at5 verify-nfr-p3 \
 	vps-demo-up vps-demo-down vps-demo-refresh vps-demo-status \
-	reconcile-control
+	reconcile-control ship-check
 
 # Dummy credentials and provider skip flags let terraform validate and plan run
 # with zero AWS contact and zero spend. TF_STACKS is the full set; TF_PLAN_STACKS
@@ -63,10 +63,20 @@ type-check:
 	$(BIN)/mypy src app/dashboard.py scripts/teardown_audit.py scripts/verify_at5_glue.py \
 		scripts/verify_nfr_p3.py scripts/recompute_station_admission.py \
 		scripts/reconcile.py scripts/capture_window.py scripts/verify_capture.py \
+		scripts/ship_check.py \
 		deploy/vps/feed_history.py deploy/vps/publish_snapshot.py
 
 test:
 	$(BIN)/pytest
+
+# Refuse to tag a commit CI has not passed. Mechanical, because the twenty-one
+# red runs that went unread were a human-memory failure and a checklist line
+# cannot fix human memory. Keyed on the SHA rather than the branch, treats "no
+# run found" and "still running" and "cancelled" as refusals, names the run it
+# read, and shells out to `make test` because invocation drift was the root
+# cause. SHA=<sha> to check a commit other than HEAD.
+ship-check:
+	$(BIN)/python scripts/ship_check.py $(SHA)
 
 # Reconcile the control window (UC-8). An apparatus check and not a result: a
 # fault here blocks the run and is diagnosed in writing, never reported as a

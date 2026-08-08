@@ -11,6 +11,26 @@ aggregate-of-record and raw) and DynamoDB (serving), the Glue database, the ECR
 repository, and the budget alarm. No compute runs. A re-demo is a single ephemeral
 apply against this standing persistent layer.
 
+## Release
+
+There was no written release procedure before 2026-08-08, which is part of why
+twenty-one red CI runs went unread through a tagged release. This is the order.
+
+1. Commit and **push**. Nothing is tagged from an unpushed commit.
+2. **`make ship-check`**. This line documents the gate; it does not guard.
+   The guard is `scripts/ship_check.py`, which refuses unless CI concluded
+   success for the exact SHA, treats a missing run, a running run and a
+   cancelled run as refusals, names the run number it read, and runs `make test`
+   because invocation drift is what broke this once already. Use
+   `make ship-check SHA=<sha>` for a commit other than HEAD.
+3. Tag only after that exits zero. Annotated tag, on the checked SHA.
+4. `gh release create`, then verify the Latest marker through
+   `repos/{owner}/{repo}/releases/latest`. It is assigned by publish timestamp
+   and not by version order, so it does not always move on its own.
+
+A checklist cannot prevent what a checklist failed to prevent. Step 2 exists so
+that the refusal is mechanical and step 2 itself is only a pointer to it.
+
 ## Offline gates (no spend, run first)
 
 ```
